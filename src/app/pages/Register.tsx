@@ -9,13 +9,14 @@ import { register } from '../../services/authService';
 
 export function Register() {
     const [formData, setFormData] = useState({
-        direccion: '',
-        nombre: '',
-        apellido: '',
         email: '',
         password: '',
-        telefono: '',
-        nacionalidad: '',
+        role: 'CLIENT',
+        firstName: '',
+        lastName: '',
+        address: '',
+        document: '',
+        phone: '',
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -38,7 +39,7 @@ export function Register() {
             return;
         }
 
-        if (!/^\d{8,15}$/.test(formData.telefono.replace(/[-()\s]/g, ''))) {
+        if (!/^\d{8,15}$/.test((formData.phone || '').replace(/[-()\s]/g, ''))) {
             setError('Ingresa un número de teléfono válido');
             return;
         }
@@ -49,12 +50,12 @@ export function Register() {
             const body = {
                 email: formData.email,
                 password: formData.password,
-                role: 'CLIENT',
-                address: formData.direccion,
-                firstName: formData.nombre,
-                lastName: formData.apellido,
-                national: formData.nacionalidad,
-                phone: formData.telefono
+                role: formData.role,
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                address: formData.address,
+                document: formData.document,
+                phone: formData.phone
             };
             await register(body);
             navigate('/', { state: { message: 'Registro exitoso. Por favor inicia sesión.' } });
@@ -153,137 +154,100 @@ export function Register() {
                             {/* Nombre y Apellido */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="nombre" className="text-white text-sm">Nombre *</Label>
+                                    <Label htmlFor="firstName" className="block text-sm font-medium text-white">Nombre</Label>
                                     <Input
-                                        id="nombre"
-                                        name="nombre"
+                                        id="firstName"
+                                        name="firstName"
                                         type="text"
-                                        placeholder="Tu nombre"
-                                        value={formData.nombre}
+                                        value={formData.firstName}
                                         onChange={handleChange}
                                         required
-                                        disabled={loading}
-                                        className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
+                                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#7fb3b0] focus:border-[#7fb3b0] sm:text-sm"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="apellido" className="text-white text-sm">Apellido *</Label>
+                                    <Label htmlFor="lastName" className="block text-sm font-medium text-white">Apellido</Label>
                                     <Input
-                                        id="apellido"
-                                        name="apellido"
+                                        id="lastName"
+                                        name="lastName"
                                         type="text"
-                                        placeholder="Tu apellido"
-                                        value={formData.apellido}
+                                        value={formData.lastName}
                                         onChange={handleChange}
                                         required
-                                        disabled={loading}
-                                        className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
+                                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#7fb3b0] focus:border-[#7fb3b0] sm:text-sm"
                                     />
                                 </div>
                             </div>
 
                             {/* Email */}
                             <div className="space-y-2">
-                                <Label htmlFor="email" className="text-white text-sm">Email *</Label>
+                                <Label htmlFor="email" className="block text-sm font-medium text-white">Correo electrónico</Label>
                                 <Input
                                     id="email"
                                     name="email"
                                     type="email"
-                                    placeholder="tu@email.com"
                                     value={formData.email}
                                     onChange={handleChange}
                                     required
-                                    disabled={loading}
-                                    className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#7fb3b0] focus:border-[#7fb3b0] sm:text-sm"
                                 />
                             </div>
 
-                            {/* Teléfono y Nacionalidad */}
+                            {/* Teléfono y Documento */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="telefono" className="text-white text-sm">Teléfono *</Label>
+                                    <Label htmlFor="phone" className="block text-sm font-medium text-white">Teléfono</Label>
                                     <Input
-                                        id="telefono"
-                                        name="telefono"
-                                        type="tel"
-                                        placeholder="+1 234 567 8900"
-                                        value={formData.telefono}
+                                        id="phone"
+                                        name="phone"
+                                        type="text"
+                                        value={formData.phone}
                                         onChange={handleChange}
                                         required
-                                        disabled={loading}
-                                        className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
+                                        className="block w-full px-3 py-2 bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 rounded-md shadow-sm focus:outline-none focus:ring-[#7fb3b0] focus:border-[#7fb3b0] sm:text-sm"
                                     />
                                 </div>
 
                                 <div className="space-y-2">
-                                    <Label htmlFor="nacionalidad" className="text-white text-sm">Nacionalidad *</Label>
-                                    <select
-                                        id="nacionalidad"
-                                        name="nacionalidad"
-                                        value={formData.nacionalidad}
+                                    <Label htmlFor="document" className="block text-sm font-medium text-white">Documento</Label>
+                                    <Input
+                                        id="document"
+                                        name="document"
+                                        type="text"
+                                        value={formData.document}
                                         onChange={handleChange}
                                         required
-                                        disabled={loading}
-                                        className="w-full px-3 py-2 bg-[#2a4644] border border-[#2a4644] text-white rounded-md focus:outline-none focus:ring-2 focus:ring-[#7fb3b0] focus:border-[#7fb3b0]"
-                                    >
-                                        <option value="">Selecciona tu nacionalidad</option>
-                                        <option value="Argentina">Argentina</option>
-                                        <option value="Bolivia">Bolivia</option>
-                                        <option value="Brasil">Brasil</option>
-                                        <option value="Chile">Chile</option>
-                                        <option value="Colombia">Colombia</option>
-                                        <option value="Costa Rica">Costa Rica</option>
-                                        <option value="Cuba">Cuba</option>
-                                        <option value="Ecuador">Ecuador</option>
-                                        <option value="El Salvador">El Salvador</option>
-                                        <option value="España">España</option>
-                                        <option value="Estados Unidos">Estados Unidos</option>
-                                        <option value="Guatemala">Guatemala</option>
-                                        <option value="Honduras">Honduras</option>
-                                        <option value="México">México</option>
-                                        <option value="Nicaragua">Nicaragua</option>
-                                        <option value="Panamá">Panamá</option>
-                                        <option value="Paraguay">Paraguay</option>
-                                        <option value="Perú">Perú</option>
-                                        <option value="Puerto Rico">Puerto Rico</option>
-                                        <option value="República Dominicana">República Dominicana</option>
-                                        <option value="Uruguay">Uruguay</option>
-                                        <option value="Venezuela">Venezuela</option>
-                                        <option value="Otro">Otro</option>
-                                    </select>
+                                        className="block w-full px-3 py-2 bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 rounded-md shadow-sm focus:outline-none focus:ring-[#7fb3b0] focus:border-[#7fb3b0] sm:text-sm"
+                                    />
                                 </div>
                             </div>
 
                             {/* Dirección */}
                             <div className="space-y-2">
-                                <Label htmlFor="direccion" className="text-white text-sm">Dirección *</Label>
+                                <Label htmlFor="address" className="block text-sm font-medium text-white">Dirección</Label>
                                 <Input
-                                    id="direccion"
-                                    name="direccion"
+                                    id="address"
+                                    name="address"
                                     type="text"
-                                    placeholder="Calle, número, ciudad, código postal"
-                                    value={formData.direccion}
+                                    value={formData.address}
                                     onChange={handleChange}
                                     required
-                                    disabled={loading}
-                                    className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
+                                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#7fb3b0] focus:border-[#7fb3b0] sm:text-sm"
                                 />
                             </div>
 
                             {/* Password */}
                             <div className="space-y-2">
-                                <Label htmlFor="password" className="text-white text-sm">Contraseña *</Label>
+                                <Label htmlFor="password" className="block text-sm font-medium text-white">Contraseña</Label>
                                 <Input
                                     id="password"
                                     name="password"
                                     type="password"
-                                    placeholder="Mínimo 6 caracteres"
                                     value={formData.password}
                                     onChange={handleChange}
                                     required
-                                    disabled={loading}
-                                    className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
+                                    className="block w-full px-3 py-2 bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 rounded-md shadow-sm focus:outline-none focus:ring-[#7fb3b0] focus:border-[#7fb3b0] sm:text-sm"
                                 />
                             </div>
 
