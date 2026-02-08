@@ -78,7 +78,7 @@ export interface Usuario {
   email: string;
   rol: 'admin' | 'proveedor' | 'cliente';
   fechaRegistro: string;
-  estado: 'activo' | 'inactivo';
+  estado: 'activo' | 'inactivo' | 'bloqueado';
 }
 
 export const herramientas: Herramienta[] = [
