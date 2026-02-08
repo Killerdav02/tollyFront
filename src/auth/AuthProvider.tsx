@@ -27,10 +27,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                     // Normalizar el rol para el frontend
                     let role = undefined;
                     if (user.roles && Array.isArray(user.roles) && user.roles.length > 0) {
-                        const roleName = user.roles[0].name?.toLowerCase();
-                        if (roleName === "admin") role = "admin";
-                        else if (roleName === "cliente" || roleName === "client") role = "cliente";
-                        else if (roleName === "proveedor" || roleName === "supplier") role = "proveedor";
+                        const roleName = user.roles[0].name;
+                        if (roleName === "ADMIN" || roleName.toLowerCase() === "admin") role = "admin";
+                        else if (roleName === "CLIENT" || roleName.toLowerCase() === "cliente" || roleName.toLowerCase() === "client") role = "cliente";
+                        else if (roleName === "SUPPLIER" || roleName.toLowerCase() === "proveedor" || roleName.toLowerCase() === "supplier") role = "proveedor";
                     }
                     setUser({ ...user, rol: role });
                 })
@@ -47,11 +47,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setLoading(true);
         setError(null);
         try {
+            console.log('Login request body:', credentials);
             const res: LoginResponse = await loginApi(credentials);
+            console.log('Login response:', res);
             setToken(res.accessToken);
             localStorage.setItem("token", res.accessToken);
             // Obtener datos del usuario tras login
             const user = await getMe();
+            console.log('User after login:', user);
             let role = undefined;
             if (user.roles && Array.isArray(user.roles) && user.roles.length > 0) {
                 const roleName = user.roles[0].name?.toLowerCase();
@@ -61,6 +64,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
             setUser({ ...user, rol: role });
         } catch (err: any) {
+            console.log('Login error:', err);
             setError(err.response?.data?.message || "Error de autenticación");
             setUser(null);
             setToken(null);

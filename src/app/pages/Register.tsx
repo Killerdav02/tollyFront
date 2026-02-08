@@ -5,16 +5,16 @@ import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Wrench, AlertCircle, ArrowLeft } from 'lucide-react';
+import { register } from '../../services/authService';
 
 export function Register() {
     const [formData, setFormData] = useState({
+        direccion: '',
         nombre: '',
         apellido: '',
         email: '',
         password: '',
-        confirmPassword: '',
         telefono: '',
-        direccion: '',
         nacionalidad: '',
     });
     const [error, setError] = useState('');
@@ -33,11 +33,6 @@ export function Register() {
         setError('');
 
         // Validaciones
-        if (formData.password !== formData.confirmPassword) {
-            setError('Las contraseñas no coinciden');
-            return;
-        }
-
         if (formData.password.length < 6) {
             setError('La contraseña debe tener al menos 6 caracteres');
             return;
@@ -51,13 +46,21 @@ export function Register() {
         setLoading(true);
 
         try {
-            // Simulación de registro (aquí iría la llamada a la API)
-            await new Promise(resolve => setTimeout(resolve, 1500));
-
-            // Redirigir al login después de registro exitoso
+            const body = {
+                email: formData.email,
+                password: formData.password,
+                role: 'CLIENT',
+                address: formData.direccion,
+                firstName: formData.nombre,
+                lastName: formData.apellido,
+                national: formData.nacionalidad,
+                phone: formData.telefono
+            };
+            await register(body);
             navigate('/', { state: { message: 'Registro exitoso. Por favor inicia sesión.' } });
-        } catch (err) {
-            setError('Error al registrarse. Por favor, inténtalo de nuevo.');
+        } catch (err: any) {
+            console.log('Error en registro:', err);
+            setError(err.response?.data?.message || 'Error al registrarse. Por favor, inténtalo de nuevo.');
         } finally {
             setLoading(false);
         }
@@ -268,37 +271,20 @@ export function Register() {
                                 />
                             </div>
 
-                            {/* Password y Confirm Password */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="password" className="text-white text-sm">Contraseña *</Label>
-                                    <Input
-                                        id="password"
-                                        name="password"
-                                        type="password"
-                                        placeholder="Mínimo 6 caracteres"
-                                        value={formData.password}
-                                        onChange={handleChange}
-                                        required
-                                        disabled={loading}
-                                        className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="confirmPassword" className="text-white text-sm">Confirmar Contraseña *</Label>
-                                    <Input
-                                        id="confirmPassword"
-                                        name="confirmPassword"
-                                        type="password"
-                                        placeholder="Repite tu contraseña"
-                                        value={formData.confirmPassword}
-                                        onChange={handleChange}
-                                        required
-                                        disabled={loading}
-                                        className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
-                                    />
-                                </div>
+                            {/* Password */}
+                            <div className="space-y-2">
+                                <Label htmlFor="password" className="text-white text-sm">Contraseña *</Label>
+                                <Input
+                                    id="password"
+                                    name="password"
+                                    type="password"
+                                    placeholder="Mínimo 6 caracteres"
+                                    value={formData.password}
+                                    onChange={handleChange}
+                                    required
+                                    disabled={loading}
+                                    className="bg-[#2a4644] border-[#2a4644] text-white placeholder:text-gray-400 focus:border-[#7fb3b0] focus:ring-[#7fb3b0]"
+                                />
                             </div>
 
                             <Button

@@ -30,3 +30,8 @@ export async function getMe(): Promise<User> {
 export function logout() {
     localStorage.removeItem("token");
 }
+
+export async function register(body: any): Promise<any> {
+    const response = await apiClient.post('/auth/register', body);
+    return response.data;
+}
