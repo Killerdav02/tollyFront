@@ -752,11 +752,11 @@ export function AdminUsuarios() {
             </DialogDescription>
           </DialogHeader>
 
-          <Select
+          <Select 
             value={newStatus}
             onValueChange={(value) => setNewStatus(value as UiStatus)}
           >
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full text-gray-100 bg-[#2a4644] border-[#3d5a5a]">
               <SelectValue placeholder="Selecciona un estado" />
             </SelectTrigger>
             <SelectContent>
