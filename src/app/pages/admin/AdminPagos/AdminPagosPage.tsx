@@ -55,7 +55,7 @@ export default function AdminPagosPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">${incomeReport.total?.toLocaleString?.() ?? 0}</div>
-                        <p className="text-xs text-green-600 mt-1">+15% vs mes anterior</p>
+                        {/* Texto de comparación con mes anterior eliminado */}
                     </CardContent>
                 </Card>
 

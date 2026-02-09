@@ -1,13 +1,69 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { reportesData, facturacionData } from '@/app/data/mockData';
+import { reportesData } from '@/app/data/mockData';
+import apiClient from '@/api/apiClient';
+import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend } from 'recharts';
 import { TrendingUp, Download } from 'lucide-react';
 import { Button } from '@/app/components/ui/button';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
+
+
 export function AdminReportes() {
+  const [ingresosTotales, setIngresosTotales] = useState<number | null>(null);
+  const [ingresosMes, setIngresosMes] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Estado para reservas
+  const [reservasTotal, setReservasTotal] = useState<number | null>(null);
+  const [loadingReservas, setLoadingReservas] = useState(true);
+  const [errorReservas, setErrorReservas] = useState<string | null>(null);
+
+  // Mock para clientes activos (puedes conectar a endpoint real si lo tienes)
+  const reservasMes = 42;
+  const clientesActivos = 12;
+
+  // Estado para herramientas más alquiladas
+  const [topTools, setTopTools] = useState<any[]>([]);
+  const [loadingTopTools, setLoadingTopTools] = useState(true);
+  const [errorTopTools, setErrorTopTools] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    apiClient.get('/admin/reports/income')
+      .then(res => {
+        setIngresosTotales(res.data.totalIncome ?? 0);
+        setIngresosMes(res.data.month ?? 0);
+      })
+      .catch(e => setError(e.message || 'Error al cargar rentabilidad'))
+      .finally(() => setLoading(false));
+
+    // Fechas para el mes actual
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const from = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+    const to = `${year}-${String(month + 1).padStart(2, '0')}-${new Date(year, month + 1, 0).getDate()}`;
+    setLoadingTopTools(true);
+    setErrorTopTools(null);
+    apiClient.get(`/admin/reports/top-tools?from=${from}&to=${to}&limit=5`)
+      .then(res => setTopTools(res.data || []))
+      .catch(e => setErrorTopTools(e.message || 'Error al cargar herramientas'))
+      .finally(() => setLoadingTopTools(false));
+
+    // Obtener total de reservas
+    setLoadingReservas(true);
+    setErrorReservas(null);
+    apiClient.get('/admin/reports/rentals')
+      .then(res => setReservasTotal(Array.isArray(res.data) ? res.data.length : 0))
+      .catch(e => setErrorReservas(e.message || 'Error al cargar reservas'))
+      .finally(() => setLoadingReservas(false));
+  }, []);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -31,11 +87,11 @@ export function AdminReportes() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-green-600">
-              ${facturacionData.ingresosTotal.toLocaleString()}
+              {loading ? 'Cargando...' : error ? <span className="text-red-600 text-base">{error}</span> : ingresosTotales !== null ? `$${ingresosTotales.toLocaleString()}` : '-'}
             </div>
             <p className="text-xs text-gray-500 mt-2 flex items-center">
               <TrendingUp className="w-3 h-3 mr-1 text-green-600" />
-              +24% respecto al año anterior
+              Ingreso total acumulado
             </p>
           </CardContent>
         </Card>
@@ -48,11 +104,9 @@ export function AdminReportes() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-blue-600">
-              {facturacionData.reservasTotal}
+              {loadingReservas ? 'Cargando...' : errorReservas ? <span className="text-red-600 text-base">{errorReservas}</span> : reservasTotal !== null ? reservasTotal : '-'}
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              {facturacionData.reservasMes} reservas este mes
-            </p>
+            {/* Texto de reservas del mes eliminado */}
           </CardContent>
         </Card>
 
@@ -106,15 +160,23 @@ export function AdminReportes() {
             <CardDescription>Top 5 equipos por número de reservas</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={reportesData.herramientasMasAlquiladas}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="nombre" angle={-45} textAnchor="end" height={100} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="alquileres" fill="#3b82f6" name="Alquileres" />
-              </BarChart>
-            </ResponsiveContainer>
+            {loadingTopTools ? (
+              <div className="h-8 flex items-center">Cargando...</div>
+            ) : errorTopTools ? (
+              <div className="text-red-600 text-xs">{errorTopTools}</div>
+            ) : topTools && topTools.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={topTools}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="toolName" angle={-45} textAnchor="end" height={100} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="totalQuantity" fill="#3b82f6" name="Alquileres" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-gray-500 text-sm">No hay datos de herramientas populares.</div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -182,9 +244,9 @@ export function AdminReportes() {
               </thead>
               <tbody>
                 {[
-                  { metrica: 'Ingresos Mensuales', valor: `$${facturacionData.ingresosMes}`, objetivo: '$3000', cumplimiento: 108 },
-                  { metrica: 'Reservas Mensuales', valor: facturacionData.reservasMes, objetivo: '50', cumplimiento: 94 },
-                  { metrica: 'Clientes Activos', valor: facturacionData.clientesActivos, objetivo: '5', cumplimiento: 80 },
+                  { metrica: 'Ingresos Mensuales', valor: loading ? 'Cargando...' : error ? 'Error' : ingresosMes !== null ? `$${ingresosMes.toLocaleString()}` : '-', objetivo: '$3000', cumplimiento: 108 },
+                  { metrica: 'Reservas Mensuales', valor: reservasMes, objetivo: '50', cumplimiento: 94 },
+                  { metrica: 'Clientes Activos', valor: clientesActivos, objetivo: '5', cumplimiento: 80 },
                   { metrica: 'Tasa de Satisfacción', valor: '4.5/5', objetivo: '4.0/5', cumplimiento: 113 },
                   { metrica: 'Tiempo Promedio Alquiler', valor: '3.2 días', objetivo: '3 días', cumplimiento: 107 },
                 ].map((row) => (
