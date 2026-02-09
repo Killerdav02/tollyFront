@@ -18,13 +18,13 @@ function resolveRole(user: any): RouteRole | null {
 
   const rolesArr = user?.roles ?? [];
   const names = rolesArr.map((r: any) =>
-    typeof r === "string" ? r : (r?.name ?? r?.authority ?? r?.role ?? "")
+    typeof r === "string" ? r : (r?.authority ?? r?.name ?? r?.role ?? "")
   );
   const upper = names.map((n: string) => n.toUpperCase());
 
-  if (upper.includes("ADMIN")) return "ADMIN";
-  if (upper.includes("SUPPLIER")) return "SUPPLIER";
-  if (upper.includes("CLIENT")) return "CLIENT";
+  if (upper.includes("ROLE_ADMIN") || upper.includes("ADMIN")) return "ADMIN";
+  if (upper.includes("ROLE_SUPPLIER") || upper.includes("SUPPLIER")) return "SUPPLIER";
+  if (upper.includes("ROLE_CLIENT") || upper.includes("CLIENT")) return "CLIENT";
 
   return null;
 }

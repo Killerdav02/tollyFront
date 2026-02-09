@@ -1,15 +1,87 @@
-import React from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { herramientas, reservas } from '@/app/data/mockData';
 import { Package, Calendar, DollarSign, AlertTriangle } from 'lucide-react';
+import { ReturnStatusBadge, ToolStatusBadge } from '@/app/components/StatusBadges';
+import { listTools } from '../../../services/toolService';
+import { listToolStatuses } from '../../../services/toolStatusService';
+import { listPaymentsBySupplier } from '../../../services/paymentService';
+import { listReturns } from '../../../services/returnService';
+import type { Tool, ToolStatus, Payment, ReturnResponse } from '../../../services/types';
+
+const SUPPLIER_ID_KEY = 'tolly_supplier_id';
+
+function normalizeReturnStatus(status?: string): 'PENDING' | 'SENT' | 'RECEIVED' | 'DAMAGED' | 'CL_DAMAGED' | 'CL_INCOMPLETE' | 'SPP_INCOMPLETE' {
+  const normalized = (status || '').toUpperCase();
+  if (['CL_DAMAGED', 'CL_INCOMPLETE', 'SPP_INCOMPLETE'].includes(normalized)) return normalized as any;
+  if (['SENT', 'ENVIADA', 'ENVIADO'].includes(normalized)) return 'SENT';
+  if (['RECEIVED', 'RECIBIDA', 'RECIBIDO'].includes(normalized)) return 'RECEIVED';
+  if (['DAMAGED', 'DANADA', 'DAÑADA'].includes(normalized)) return 'DAMAGED';
+  return 'PENDING';
+}
+
+function resolveSupplierId(tools: Tool[]): number | null {
+  const stored = localStorage.getItem(SUPPLIER_ID_KEY);
+  if (stored && !Number.isNaN(Number(stored))) return Number(stored);
+  const unique = Array.from(new Set(tools.map((tool) => tool.supplierId)));
+  if (unique.length === 1) {
+    localStorage.setItem(SUPPLIER_ID_KEY, String(unique[0]));
+    return unique[0];
+  }
+  return null;
+}
 
 export function ProveedorDashboard() {
-  const misReservas = reservas;
-  const misHerramientas = herramientas;
-  const reservasPendientes = misReservas.filter(r => r.estado === 'PENDING').length;
-  const ingresosEsteMes = misReservas
-    .filter(r => r.estado === 'FINISHED' || r.estado === 'CONFIRMED')
-    .reduce((sum, r) => sum + r.precioTotal, 0);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [statuses, setStatuses] = useState<ToolStatus[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [returns, setReturns] = useState<ReturnResponse[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      try {
+        const [toolData, statusData, returnData] = await Promise.all([
+          listTools(),
+          listToolStatuses(),
+          listReturns(),
+        ]);
+        setTools(toolData);
+        setStatuses(statusData);
+        setReturns(returnData);
+
+        const supplierId = resolveSupplierId(toolData);
+        if (supplierId) {
+          const paymentData = await listPaymentsBySupplier(supplierId);
+          setPayments(paymentData);
+        }
+      } catch {
+        // Silent fail for dashboard
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  const statusNameById = useMemo(() => {
+    return statuses.reduce<Record<number, string>>((acc, status) => {
+      acc[status.id] = status.name;
+      return acc;
+    }, {});
+  }, [statuses]);
+
+  const availableTools = tools.filter((tool) => {
+    const name = (statusNameById[tool.statusId] || '').toUpperCase();
+    return ['AVAILABLE', 'DISPONIBLE'].includes(name);
+  });
+
+  const pendingReturns = returns.filter((ret) =>
+    ['SENT', 'CL_DAMAGED', 'CL_INCOMPLETE'].includes(normalizeReturnStatus(ret.returnStatusName))
+  );
+  const ingresosEsteMes = payments
+    .filter((payment) => (payment.status || '').toUpperCase() === 'PAID')
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -18,7 +90,6 @@ export function ProveedorDashboard() {
         <p className="text-gray-600 mt-1">Gestiona tu inventario y reservas</p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -28,9 +99,9 @@ export function ProveedorDashboard() {
             <Package className="w-4 h-4 text-gray-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{misHerramientas.length}</div>
+            <div className="text-2xl font-bold">{tools.length}</div>
             <p className="text-xs text-gray-500 mt-1">
-              {misHerramientas.filter(h => h.availableQuantity > 0).length} disponibles
+              {availableTools.length} disponibles
             </p>
           </CardContent>
         </Card>
@@ -38,14 +109,14 @@ export function ProveedorDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Reservas Activas
+              Devoluciones Pendientes
             </CardTitle>
             <Calendar className="w-4 h-4 text-gray-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{misReservas.length}</div>
+            <div className="text-2xl font-bold">{pendingReturns.length}</div>
             <p className="text-xs text-gray-500 mt-1">
-              {reservasPendientes} pendientes
+              Por confirmar recepción
             </p>
           </CardContent>
         </Card>
@@ -53,32 +124,31 @@ export function ProveedorDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Ingresos Este Mes
+              Ingresos Registrados
             </CardTitle>
             <DollarSign className="w-4 h-4 text-gray-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">${ingresosEsteMes.toLocaleString()}</div>
-            <p className="text-xs text-green-600 mt-1">+18% vs mes anterior</p>
+            <p className="text-xs text-gray-500 mt-1">Pagos asociados al proveedor</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
-              Tasa Ocupación
+              Estado del Servicio
             </CardTitle>
             <AlertTriangle className="w-4 h-4 text-gray-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">72%</div>
-            <p className="text-xs text-gray-500 mt-1">Promedio mensual</p>
+            <div className="text-2xl font-bold">{loading ? '...' : 'OK'}</div>
+            <p className="text-xs text-gray-500 mt-1">Datos sincronizados</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Alerts */}
-      {reservasPendientes > 0 && (
+      {pendingReturns.length > 0 && (
         <Card className="border-orange-200 bg-orange-50">
           <CardHeader>
             <CardTitle className="text-orange-900 flex items-center">
@@ -88,69 +158,63 @@ export function ProveedorDashboard() {
           </CardHeader>
           <CardContent>
             <p className="text-orange-800">
-              Tienes {reservasPendientes} reserva(s) pendiente(s) de confirmación. 
-              Revisa la sección de Reservas para gestionarlas.
+              Tienes {pendingReturns.length} devolución(es) pendiente(s). Revisa la sección de Reservas.
             </p>
           </CardContent>
         </Card>
       )}
 
-      {/* Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Reservas Recientes</CardTitle>
-            <CardDescription>Últimas solicitudes de alquiler</CardDescription>
+            <CardTitle>Herramientas Recientes</CardTitle>
+            <CardDescription>Últimos equipos registrados</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {misReservas.slice(0, 5).map((reserva) => (
-                <div key={reserva.id} className="flex items-center justify-between pb-4 border-b last:border-0">
+              {tools.slice(0, 5).map((tool) => (
+                <div key={tool.id} className="flex items-center justify-between pb-4 border-b last:border-0">
                   <div>
-                    <p className="font-medium text-gray-900">{reserva.herramientaNombre}</p>
-                    <p className="text-sm text-gray-500">{reserva.clienteNombre}</p>
-                    <p className="text-xs text-gray-400">
-                      {new Date(reserva.fechaInicio).toLocaleDateString('es-ES')} - {new Date(reserva.fechaFin).toLocaleDateString('es-ES')}
-                    </p>
+                    <p className="font-medium text-gray-900">{tool.name}</p>
+                    <p className="text-sm text-gray-500">ID #{tool.id}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium text-gray-900">${reserva.precioTotal}</p>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      reserva.estado === 'confirmada' ? 'bg-green-100 text-green-800' :
-                      reserva.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {reserva.estado}
-                    </span>
+                    <ToolStatusBadge
+                      status={
+                        (statusNameById[tool.statusId] || 'UNAVAILABLE').toUpperCase() as any
+                      }
+                    />
                   </div>
                 </div>
               ))}
+              {tools.length === 0 && (
+                <p className="text-sm text-gray-500">No hay herramientas registradas.</p>
+              )}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Estado del Inventario</CardTitle>
-            <CardDescription>Resumen de tus herramientas</CardDescription>
+            <CardTitle>Devoluciones Recientes</CardTitle>
+            <CardDescription>Últimas devoluciones registradas</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {misHerramientas.slice(0, 5).map((herramienta) => (
-                <div key={herramienta.id} className="flex items-center justify-between pb-4 border-b last:border-0">
+              {returns.slice(0, 5).map((ret) => (
+                <div key={ret.id} className="flex items-center justify-between pb-4 border-b last:border-0">
                   <div>
-                    <p className="font-medium text-gray-900">{herramienta.nombre}</p>
-                    <p className="text-sm text-gray-500">{herramienta.categoria}</p>
+                    <p className="font-medium text-gray-900">Devolución #{ret.id}</p>
+                    <p className="text-sm text-gray-500">Reserva #{ret.reservationId}</p>
                   </div>
                   <div className="text-right">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      herramienta.availableQuantity > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {herramienta.availableQuantity > 0 ? 'Disponible' : 'No disponible'}
-                    </span>
+                    <ReturnStatusBadge status={normalizeReturnStatus(ret.returnStatusName)} />
                   </div>
                 </div>
               ))}
+              {returns.length === 0 && (
+                <p className="text-sm text-gray-500">No hay devoluciones registradas.</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -158,3 +222,4 @@ export function ProveedorDashboard() {
     </div>
   );
 }
+
