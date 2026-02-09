@@ -53,6 +53,8 @@ export function ClientePagos() {
     null,
   );
   const [loadingPago, setLoadingPago] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReservaId, setCancelReservaId] = useState<string | null>(null);
 
   const normalizeStatus = (status?: string) =>
     status ? status.toUpperCase() : "";
@@ -195,6 +197,29 @@ export function ClientePagos() {
     }
   };
 
+  const isFutureStartDate = (value?: string) => {
+    if (!value) return false;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
+    return date > today;
+  };
+
+  const handleCancelReserva = async (reservaId: string) => {
+    setLoadingPago(true);
+    try {
+      await apiClient.put(`/api/reservations/${reservaId}/cancel`);
+      toast.success("Reserva cancelada exitosamente");
+      fetchPagosData();
+    } catch (error: any) {
+      toast.error("No se pudo cancelar la reserva");
+    } finally {
+      setLoadingPago(false);
+    }
+  };
+
   const handlePagoPendiente = async () => {
     const reservationId = Number(selectedPago?.reservationId);
     if (!reservationId) {
@@ -317,6 +342,9 @@ export function ClientePagos() {
                     <th className="text-left py-3 px-4 font-medium text-gray-600">
                       Estado
                     </th>
+                    <th className="text-center py-3 px-4 font-medium text-gray-600">
+                      Cancelar
+                    </th>
                     <th className="text-right py-3 px-4 font-medium text-gray-600">
                       Acción
                     </th>
@@ -343,18 +371,36 @@ export function ClientePagos() {
                           {pago.estado || "Completado"}
                         </Badge>
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        {pago.estado === "PENDING" ? (
+                      <td className="py-3 px-4 text-center">
+                        {pago.estado === "PENDING" && pago.reservationId && (
                           <Button
                             size="sm"
                             variant="outline"
+                            className="border-red-200 text-red-700 hover:bg-red-50"
                             onClick={() => {
-                              setSelectedPago(pago);
-                              setShowPagoDialog(true);
+                              setCancelReservaId(pago.reservationId);
+                              setShowCancelDialog(true);
                             }}
+                            disabled={loadingPago}
                           >
-                            Pagar
+                            Cancelar
                           </Button>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        {pago.estado === "PENDING" ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedPago(pago);
+                                setShowPagoDialog(true);
+                              }}
+                            >
+                              Pagar
+                            </Button>
+                          </div>
                         ) : (
                           <Button
                             size="sm"
@@ -412,72 +458,90 @@ export function ClientePagos() {
                     <p className="text-xl font-bold text-gray-900">
                       ${reserva.precioTotal}
                     </p>
-                    <Dialog>
-                      <DialogTrigger asChild>
+                    {reserva.estado === "PENDING" &&
+                      isFutureStartDate(reserva.fechaInicio) && (
                         <Button
-                          onClick={() => setSelectedReserva(reserva)}
+                          variant="outline"
+                          className="border-red-200 text-red-700 hover:bg-red-50"
+                          onClick={() => {
+                            setCancelReservaId(reserva.id);
+                            setShowCancelDialog(true);
+                          }}
                           disabled={loadingPago}
                         >
-                          Pagar Ahora
+                          Cancelar
                         </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Realizar Pago</DialogTitle>
-                          <DialogDescription>
-                            Completa el pago para {reserva.herramientaNombre}
-                          </DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                          <div className="bg-gray-50 p-4 rounded-lg">
-                            <div className="flex justify-between mb-2">
-                              <span className="text-gray-600">
-                                Herramienta:
-                              </span>
-                              <span className="font-medium">
-                                {reserva.herramientaNombre}
-                              </span>
+                      )}
+                    {reserva.estado !== "CANCELLED" && (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button
+                            onClick={() => setSelectedReserva(reserva)}
+                            disabled={loadingPago}
+                          >
+                            Pagar Ahora
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                          <DialogHeader>
+                            <DialogTitle>Realizar Pago</DialogTitle>
+                            <DialogDescription>
+                              Completa el pago para {reserva.herramientaNombre}
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4">
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                              <div className="flex justify-between mb-2">
+                                <span className="text-gray-600">
+                                  Herramienta:
+                                </span>
+                                <span className="font-medium">
+                                  {reserva.herramientaNombre}
+                                </span>
+                              </div>
+                              <div className="flex justify-between mb-2">
+                                <span className="text-gray-600">Periodo:</span>
+                                <span className="font-medium">
+                                  {formatDate(reserva.fechaInicio)} -{" "}
+                                  {formatDate(reserva.fechaFin)}
+                                </span>
+                              </div>
+                              <div className="flex justify-between pt-2 border-t">
+                                <span className="font-semibold">Total:</span>
+                                <span className="text-xl font-bold text-blue-600">
+                                  ${reserva.precioTotal}
+                                </span>
+                              </div>
                             </div>
-                            <div className="flex justify-between mb-2">
-                              <span className="text-gray-600">Periodo:</span>
-                              <span className="font-medium">
-                                {formatDate(reserva.fechaInicio)} -{" "}
-                                {formatDate(reserva.fechaFin)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between pt-2 border-t">
-                              <span className="font-semibold">Total:</span>
-                              <span className="text-xl font-bold text-blue-600">
-                                ${reserva.precioTotal}
-                              </span>
-                            </div>
-                          </div>
 
-                          <div className="space-y-2">
-                            <Label>Selecciona método de pago:</Label>
                             <div className="space-y-2">
-                              <Button
-                                variant="outline"
-                                className="w-full justify-start"
-                                onClick={() => handlePago("Tarjeta de Crédito")}
-                                disabled={loadingPago}
-                              >
-                                <CreditCard className="w-4 h-4 mr-2" />
-                                Tarjeta de Crédito (••• 4242)
-                              </Button>
-                              <Button
-                                variant="outline"
-                                className="w-full justify-start"
-                                onClick={() => handlePago("PayPal")}
-                                disabled={loadingPago}
-                              >
-                                PayPal
-                              </Button>
+                              <Label>Selecciona método de pago:</Label>
+                              <div className="space-y-2">
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-start"
+                                  onClick={() =>
+                                    handlePago("Tarjeta de Crédito")
+                                  }
+                                  disabled={loadingPago}
+                                >
+                                  <CreditCard className="w-4 h-4 mr-2" />
+                                  Tarjeta de Crédito (••• 4242)
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  className="w-full justify-start"
+                                  onClick={() => handlePago("PayPal")}
+                                  disabled={loadingPago}
+                                >
+                                  PayPal
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                        </DialogContent>
+                      </Dialog>
+                    )}
                   </div>
                 </div>
               ))}
@@ -485,6 +549,40 @@ export function ClientePagos() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar cancelacion</DialogTitle>
+            <DialogDescription>
+              Esta accion cancelara la reserva seleccionada. ¿Deseas continuar?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowCancelDialog(false)}
+              disabled={loadingPago}
+            >
+              Volver
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                if (cancelReservaId) {
+                  handleCancelReserva(cancelReservaId);
+                }
+                setShowCancelDialog(false);
+                setCancelReservaId(null);
+              }}
+              disabled={loadingPago}
+            >
+              Confirmar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showPagoDialog} onOpenChange={setShowPagoDialog}>
         <DialogContent>

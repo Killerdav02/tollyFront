@@ -92,9 +92,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return items.reduce((total, item) => {
       const inicio = new Date(item.fechaInicio);
       const fin = new Date(item.fechaFin);
-      const dias =
-        Math.ceil((fin.getTime() - inicio.getTime()) / (1000 * 3600 * 24)) + 1;
-      return total + dias * item.herramienta.precioDia * item.quantity;
+      const inicioTime = inicio.getTime();
+      const finTime = fin.getTime();
+      if (!Number.isFinite(inicioTime) || !Number.isFinite(finTime)) {
+        return total;
+      }
+      const dias = Math.ceil((finTime - inicioTime) / (1000 * 3600 * 24)) + 1;
+      if (!Number.isFinite(dias) || dias <= 0) {
+        return total;
+      }
+      const precioDia = Number(item.herramienta.precioDia ?? 0);
+      const cantidad = Number(item.quantity ?? 0);
+      if (!Number.isFinite(precioDia) || !Number.isFinite(cantidad)) {
+        return total;
+      }
+      return total + dias * precioDia * cantidad;
     }, 0);
   };
 
