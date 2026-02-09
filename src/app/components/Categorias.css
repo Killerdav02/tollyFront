@@ -1,0 +1,112 @@
+.usuario-pagina .categoria{
+  margin-top:180px;
+}
+.usuario-pagina .categoria h1{
+  font-size: 3rem;
+  text-align: center;
+  margin-bottom: 40px;
+}
+.usuario-pagina .grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax( 400px, 1fr));
+  gap: 20px;
+  padding: 20px;
+}
+
+.usuario-pagina .card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-decoration: none;
+  gap: 20px;
+  color: black;
+  border: 1px solid black;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.3s, box-shadow 0.3s;
+  background-color: #fff;
+}
+
+.usuario-pagina .card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+.usuario-pagina .arriba{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  gap: 20px;
+  padding: 20px;
+}
+.usuario-pagina .arriba h3{
+  font-size: 1.7rem;
+  text-align: center;
+}
+.usuario-pagina .arriba p{
+  font-size: 2rem;
+}
+.usuario-pagina .medio img {
+  width: 100%;
+  height: 300px;
+  object-fit: contain;
+}
+.usuario-pagina .abajo{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 30px;
+  font-size: 2rem;
+  margin: 20px;
+}
+.usuario-pagina .abajo a{
+  cursor: pointer;
+  text-decoration: none;
+}
+.usuario-pagina .abajo p{
+  color: #2563eb;
+}
+
+.usuario-pagina .abajo .carrito{
+  background-color: #2563eb;
+  padding: 20px 25px;
+  border-radius: 10px;
+  border: none;
+  color: white;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+.usuario-pagina .carrito i{
+  text-decoration: none;
+  color: white;
+}
+.usuario-pagina .carrito:hover{
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+  background-color: #1d4ed8;
+}
+
+/* Estilos para las notificaciones */
+.notificacion {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: #10b981;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  font-weight: 500;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+}
+
+.notificacion.mostrar {
+  transform: translateX(0);
+}
+
+/* Animación para el botón del carrito cuando se hace clic */
+.usuario-pagina .carrito:active {
+  transform: scale(0.95);
+}

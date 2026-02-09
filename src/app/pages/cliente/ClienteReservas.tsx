@@ -1,46 +1,159 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Button } from '@/app/components/ui/button';
-import { Input } from '@/app/components/ui/input';
-import { Label } from '@/app/components/ui/label';
-import { Textarea } from '@/app/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
-import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { reservas, returns, Return, ReturnDetail, reservationDetails } from '@/app/data/mockData';
-import { useAuth } from '../../../auth/useAuth';
-import { ReservationStatusBadge, ReturnStatusBadge, canModifyReservation, getModificationBlockedMessage, getReturnStatusMessage } from '@/app/components/StatusBadges';
-import { ReturnTimeline } from '@/app/components/ReturnTimeline';
-import { Calendar, Package, AlertCircle, PackageCheck, Send, Eye } from 'lucide-react';
-import { toast } from 'sonner';
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
+import { Label } from "@/app/components/ui/label";
+import { Textarea } from "@/app/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/app/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/app/components/ui/dialog";
+import { Alert, AlertDescription } from "@/app/components/ui/alert";
+import { returns, Return, ReturnDetail } from "@/app/data/mockData";
+import { useAuth } from "../../../auth/useAuth";
+import apiClient from "@/api/apiClient";
+import {
+  ReservationStatusBadge,
+  ReturnStatusBadge,
+  canModifyReservation,
+  getModificationBlockedMessage,
+  getReturnStatusMessage,
+} from "@/app/components/StatusBadges";
+import { ReturnTimeline } from "@/app/components/ReturnTimeline";
+import {
+  Calendar,
+  Package,
+  AlertCircle,
+  PackageCheck,
+  Send,
+  Eye,
+} from "lucide-react";
+import { toast } from "sonner";
 
 export function ClienteReservas() {
   const { user } = useAuth();
+  const [misReservas, setMisReservas] = useState<
+    Array<{
+      id: string;
+      fechaInicio: string;
+      fechaFin: string;
+      precioTotal: number;
+      estado: string;
+      details?: Array<{
+        id?: string;
+        toolId?: string;
+        toolName?: string;
+        quantity?: number;
+        subtotal?: number;
+      }>;
+    }>
+  >([]);
+  const [loadingReservas, setLoadingReservas] = useState(false);
+  const [errorReservas, setErrorReservas] = useState<string | null>(null);
   const [showCreateReturn, setShowCreateReturn] = useState(false);
-  const [selectedReservation, setSelectedReservation] = useState<string | null>(null);
-  const [showReturnDetails, setShowReturnDetails] = useState<string | null>(null);
-  const [returnDetails, setReturnDetails] = useState<Omit<ReturnDetail, 'id' | 'returnId'>[]>([]);
-  const [returnNotes, setReturnNotes] = useState('');
+  const [selectedReservation, setSelectedReservation] = useState<string | null>(
+    null,
+  );
+  const [showReturnDetails, setShowReturnDetails] = useState<string | null>(
+    null,
+  );
+  const [returnDetails, setReturnDetails] = useState<
+    Omit<ReturnDetail, "id" | "returnId">[]
+  >([]);
+  const [returnNotes, setReturnNotes] = useState("");
 
-  const misReservas = reservas.filter(r => r.clienteId === user?.id);
-  const misReturnos = returns.filter(r => r.clienteId === user?.id);
+  const misReturnos = returns.filter((r) => r.clienteId === user?.id);
 
-  const handleCreateReturn = (reservationId: string) => {
-    const reservation = reservas.find(r => r.id === reservationId);
-    if (!reservation) return;
+  const fetchReservas = useCallback(async () => {
+    const clientId = user?.client?.id;
+    if (!clientId) return;
+    setLoadingReservas(true);
+    setErrorReservas(null);
+    try {
+      const res = await apiClient.get(`/api/reservations/client/${clientId}`);
+      const rawReservas = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.content)
+          ? res.data.content
+          : [];
+      const data = rawReservas.map((reserva: any) => {
+        const estado = String(
+          reserva.statusName || reserva.status || reserva.estado || "",
+        ).toUpperCase();
+        return {
+          id: String(reserva.id),
+          fechaInicio:
+            reserva.startDate || reserva.fechaInicio || reserva.start_date,
+          fechaFin: reserva.endDate || reserva.fechaFin || reserva.end_date,
+          precioTotal: Number(
+            reserva.totalPrice ??
+              reserva.total ??
+              reserva.precioTotal ??
+              reserva.total_price ??
+              0,
+          ),
+          estado: estado || "PENDING",
+          details: Array.isArray(reserva.details) ? reserva.details : [],
+        };
+      });
+      setMisReservas(data);
+    } catch (error) {
+      setErrorReservas("No se pudieron cargar las reservas");
+      setMisReservas([]);
+    } finally {
+      setLoadingReservas(false);
+    }
+  }, [user?.client?.id]);
 
-    // Pre-llenar con todos los items de la reserva
-    const initialDetails: Omit<ReturnDetail, 'id' | 'returnId'>[] = reservation.details.map(detail => ({
-      toolId: detail.toolId,
-      toolName: detail.toolName,
-      quantityReserved: detail.quantity,
-      quantityToReturn: detail.quantity,
-      notes: '',
-    }));
+  useEffect(() => {
+    fetchReservas();
+  }, [fetchReservas]);
 
-    setReturnDetails(initialDetails);
+  const handleCreateReturn = async (reservationId: string) => {
     setSelectedReservation(reservationId);
     setShowCreateReturn(true);
+    try {
+      const detailsRes = await apiClient.get(
+        `/api/reservations/details/reservation/${reservationId}`,
+      );
+      const details = Array.isArray(detailsRes.data) ? detailsRes.data : [];
+      if (details.length === 0) {
+        toast.error("La reserva no tiene detalles");
+        setReturnDetails([]);
+        return;
+      }
+      const initialDetails: Omit<ReturnDetail, "id" | "returnId">[] =
+        details.map((detail: any) => ({
+          toolId: String(detail.toolId || detail.tool?.id || ""),
+          toolName: detail.toolName || detail.tool?.name || "Herramienta",
+          quantityReserved: Number(detail.quantity ?? 0),
+          quantityToReturn: Number(detail.quantity ?? 0),
+          notes: "",
+        }));
+
+      setReturnDetails(initialDetails);
+    } catch (error) {
+      toast.error("No se pudieron cargar los detalles de la reserva");
+      setReturnDetails([]);
+    }
   };
 
   const handleSubmitReturn = () => {
@@ -48,41 +161,51 @@ export function ClienteReservas() {
 
     // Validar que todas las cantidades sean válidas
     const hasInvalidQuantity = returnDetails.some(
-      detail => detail.quantityToReturn <= 0 || detail.quantityToReturn > detail.quantityReserved
+      (detail) =>
+        detail.quantityToReturn <= 0 ||
+        detail.quantityToReturn > detail.quantityReserved,
     );
 
     if (hasInvalidQuantity) {
-      toast.error('Las cantidades a devolver deben ser válidas (entre 1 y la cantidad reservada)');
+      toast.error(
+        "Las cantidades a devolver deben ser válidas (entre 1 y la cantidad reservada)",
+      );
       return;
     }
 
-    toast.success('Devolución creada exitosamente. Estado: PENDING');
+    toast.success("Devolución creada exitosamente. Estado: PENDING");
     setShowCreateReturn(false);
     setReturnDetails([]);
-    setReturnNotes('');
+    setReturnNotes("");
     setSelectedReservation(null);
   };
 
   const handleConfirmShipment = (returnId: string) => {
-    toast.success('Envío confirmado. Estado actualizado a SENT');
+    toast.success("Envío confirmado. Estado actualizado a SENT");
   };
 
   const canCreateReturn = (reservationStatus: string) => {
-    return reservationStatus === 'IN_PROGRESS' || reservationStatus === 'CONFIRMED';
+    return (
+      reservationStatus === "IN_PROGRESS" || reservationStatus === "CONFIRMED"
+    );
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Mis Reservas</h1>
-        <p className="text-gray-600 mt-1">Gestiona tus alquileres y devoluciones de herramientas</p>
+        <p className="text-gray-600 mt-1">
+          Gestiona tus alquileres y devoluciones de herramientas
+        </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-600">Total Reservas</CardTitle>
+            <CardTitle className="text-sm text-gray-600">
+              Total Reservas
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{misReservas.length}</div>
@@ -94,7 +217,21 @@ export function ClienteReservas() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {misReservas.filter(r => r.estado === 'CONFIRMED' || r.estado === 'IN_PROGRESS').length}
+              {
+                misReservas.filter(
+                  (r) => r.estado === "CONFIRMED" || r.estado === "IN_PROGRESS",
+                ).length
+              }
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-gray-600">Cancelado</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {misReservas.filter((r) => r.estado === "CANCELLED").length}
             </div>
           </CardContent>
         </Card>
@@ -104,24 +241,32 @@ export function ClienteReservas() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {misReservas.filter(r => r.estado === 'FINISHED').length}
+              {misReservas.filter((r) => r.estado === "FINISHED").length}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-600">Total Gastado</CardTitle>
+            <CardTitle className="text-sm text-gray-600">Incidente</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">
-              ${misReservas.reduce((sum, r) => sum + r.precioTotal, 0)}
+              {misReservas.filter((r) => r.estado === "IN_INCIDENT").length}
             </div>
           </CardContent>
         </Card>
       </div>
 
+      {loadingReservas && (
+        <div className="text-sm text-gray-500">Cargando reservas...</div>
+      )}
+      {errorReservas && (
+        <div className="text-sm text-red-600">{errorReservas}</div>
+      )}
+
       {/* Devoluciones Pendientes */}
-      {misReturnos.filter(r => r.status === 'PENDING' || r.status === 'SENT').length > 0 && (
+      {misReturnos.filter((r) => r.status === "PENDING" || r.status === "SENT")
+        .length > 0 && (
         <Card className="border-orange-200">
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -135,9 +280,11 @@ export function ClienteReservas() {
           <CardContent>
             <div className="space-y-4">
               {misReturnos
-                .filter(r => r.status === 'PENDING' || r.status === 'SENT')
+                .filter((r) => r.status === "PENDING" || r.status === "SENT")
                 .map((ret) => {
-                  const reservation = reservas.find(r => r.id === ret.reservationId);
+                  const reservation = misReservas.find(
+                    (r) => r.id === ret.reservationId,
+                  );
                   return (
                     <div
                       key={ret.id}
@@ -155,7 +302,8 @@ export function ClienteReservas() {
                             Reserva: #{ret.reservationId}
                           </p>
                           <p className="text-sm text-gray-600 mb-2">
-                            Herramientas: {ret.details.map(d => d.toolName).join(', ')}
+                            Herramientas:{" "}
+                            {ret.details.map((d) => d.toolName).join(", ")}
                           </p>
                           <p className="text-sm text-gray-500">
                             {getReturnStatusMessage(ret.status)}
@@ -164,14 +312,20 @@ export function ClienteReservas() {
                         <div className="flex gap-2">
                           <Dialog>
                             <DialogTrigger asChild>
-                              <Button variant="outline" size="sm" onClick={() => setShowReturnDetails(ret.id)}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowReturnDetails(ret.id)}
+                              >
                                 <Eye className="w-4 h-4 mr-1" />
                                 Ver Detalles
                               </Button>
                             </DialogTrigger>
                             <DialogContent className="max-w-2xl">
                               <DialogHeader>
-                                <DialogTitle>Detalles de Devolución #{ret.id.slice(0, 8)}</DialogTitle>
+                                <DialogTitle>
+                                  Detalles de Devolución #{ret.id.slice(0, 8)}
+                                </DialogTitle>
                                 <DialogDescription>
                                   Estado actual: {ret.status}
                                 </DialogDescription>
@@ -184,17 +338,27 @@ export function ClienteReservas() {
                                   receivedAt={ret.receivedAt}
                                 />
                                 <div>
-                                  <h4 className="font-medium mb-3">Herramientas a Devolver</h4>
+                                  <h4 className="font-medium mb-3">
+                                    Herramientas a Devolver
+                                  </h4>
                                   <div className="space-y-2">
                                     {ret.details.map((detail) => (
-                                      <div key={detail.id} className="flex justify-between items-start p-3 bg-gray-50 rounded">
+                                      <div
+                                        key={detail.id}
+                                        className="flex justify-between items-start p-3 bg-gray-50 rounded"
+                                      >
                                         <div>
-                                          <p className="font-medium">{detail.toolName}</p>
+                                          <p className="font-medium">
+                                            {detail.toolName}
+                                          </p>
                                           <p className="text-sm text-gray-600">
-                                            Cantidad: {detail.quantityToReturn} de {detail.quantityReserved}
+                                            Cantidad: {detail.quantityToReturn}{" "}
+                                            de {detail.quantityReserved}
                                           </p>
                                           {detail.notes && (
-                                            <p className="text-sm text-gray-500 mt-1">{detail.notes}</p>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                              {detail.notes}
+                                            </p>
                                           )}
                                         </div>
                                       </div>
@@ -204,7 +368,7 @@ export function ClienteReservas() {
                               </div>
                             </DialogContent>
                           </Dialog>
-                          {ret.status === 'PENDING' && (
+                          {ret.status === "PENDING" && (
                             <Button
                               size="sm"
                               onClick={() => handleConfirmShipment(ret.id)}
@@ -225,7 +389,9 @@ export function ClienteReservas() {
       )}
 
       {/* Reservas Activas */}
-      {misReservas.filter(r => r.estado === 'CONFIRMED' || r.estado === 'IN_PROGRESS').length > 0 && (
+      {misReservas.filter(
+        (r) => r.estado === "CONFIRMED" || r.estado === "IN_PROGRESS",
+      ).length > 0 && (
         <Card className="border-green-200">
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -239,7 +405,9 @@ export function ClienteReservas() {
           <CardContent>
             <div className="space-y-4">
               {misReservas
-                .filter(r => r.estado === 'CONFIRMED' || r.estado === 'IN_PROGRESS')
+                .filter(
+                  (r) => r.estado === "CONFIRMED" || r.estado === "IN_PROGRESS",
+                )
                 .map((reserva) => (
                   <div
                     key={reserva.id}
@@ -248,18 +416,37 @@ export function ClienteReservas() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-gray-900">Reserva #{reserva.id}</h3>
+                          <h3 className="font-semibold text-gray-900">
+                            Reserva #{reserva.id}
+                          </h3>
                           <ReservationStatusBadge status={reserva.estado} />
                         </div>
                         <div className="space-y-1 mb-3">
-                          {reserva.details.map(detail => (
-                            <p key={detail.id} className="text-sm text-gray-700">
-                              • {detail.toolName} x{detail.quantity} - ${detail.subtotal}
+                          {reserva.details && reserva.details.length > 0 ? (
+                            reserva.details.map((detail) => (
+                              <p
+                                key={detail.id || detail.toolId}
+                                className="text-sm text-gray-700"
+                              >
+                                • {detail.toolName} x{detail.quantity} - $
+                                {detail.subtotal ?? 0}
+                              </p>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-500">
+                              Sin detalles
                             </p>
-                          ))}
+                          )}
                         </div>
                         <p className="text-sm text-gray-600 mb-1">
-                          Periodo: {new Date(reserva.fechaInicio).toLocaleDateString('es-ES')} - {new Date(reserva.fechaFin).toLocaleDateString('es-ES')}
+                          Periodo:{" "}
+                          {new Date(reserva.fechaInicio).toLocaleDateString(
+                            "es-ES",
+                          )}{" "}
+                          -{" "}
+                          {new Date(reserva.fechaFin).toLocaleDateString(
+                            "es-ES",
+                          )}
                         </p>
                         <p className="text-sm font-medium text-gray-900">
                           Total: ${reserva.precioTotal}
@@ -287,7 +474,9 @@ export function ClienteReservas() {
       <Card>
         <CardHeader>
           <CardTitle>Historial de Reservas</CardTitle>
-          <CardDescription>Todas tus reservas y su estado actual</CardDescription>
+          <CardDescription>
+            Todas tus reservas y su estado actual
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {misReservas.length > 0 ? (
@@ -295,12 +484,24 @@ export function ClienteReservas() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">ID</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Herramientas</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Periodo</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Total</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Estado</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Acciones</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      ID
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      Herramientas
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      Periodo
+                    </th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">
+                      Total
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      Estado
+                    </th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">
+                      Acciones
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -309,17 +510,32 @@ export function ClienteReservas() {
                       <td className="py-3 px-4 text-gray-600">#{reserva.id}</td>
                       <td className="py-3 px-4">
                         <div className="space-y-1">
-                          {reserva.details.map(detail => (
-                            <p key={detail.id} className="text-sm">
-                              {detail.toolName} (x{detail.quantity})
+                          {reserva.details && reserva.details.length > 0 ? (
+                            reserva.details.map((detail) => (
+                              <p
+                                key={detail.id || detail.toolId}
+                                className="text-sm"
+                              >
+                                {detail.toolName} (x{detail.quantity})
+                              </p>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-500">
+                              Sin detalles
                             </p>
-                          ))}
+                          )}
                         </div>
                       </td>
                       <td className="py-3 px-4 text-gray-600 text-sm">
-                        {new Date(reserva.fechaInicio).toLocaleDateString('es-ES')} - {new Date(reserva.fechaFin).toLocaleDateString('es-ES')}
+                        {new Date(reserva.fechaInicio).toLocaleDateString(
+                          "es-ES",
+                        )}{" "}
+                        -{" "}
+                        {new Date(reserva.fechaFin).toLocaleDateString("es-ES")}
                       </td>
-                      <td className="py-3 px-4 text-right font-medium">${reserva.precioTotal}</td>
+                      <td className="py-3 px-4 text-right font-medium">
+                        ${reserva.precioTotal}
+                      </td>
                       <td className="py-3 px-4">
                         <ReservationStatusBadge status={reserva.estado} />
                       </td>
@@ -336,10 +552,25 @@ export function ClienteReservas() {
                         )}
                         {!canModifyReservation(reserva.estado) && (
                           <span className="text-sm text-gray-500">
-                            {reserva.estado === 'FINISHED' ? 'Finalizada' : 
-                             reserva.estado === 'CANCELLED' ? 'Cancelada' : 
-                             'En Incidente'}
+                            {reserva.estado === "FINISHED"
+                              ? "Finalizada"
+                              : reserva.estado === "CANCELLED"
+                                ? "Cancelada"
+                                : "En Incidente"}
                           </span>
+                        )}
+                        {/* Botón de descarga de factura, solo si la reserva está finalizada */}
+                        {reserva.estado === "FINISHED" && (
+                          <Button
+                            size="sm"
+                            className="bg-purple-600 hover:bg-purple-700 ml-2"
+                            onClick={() => {
+                              // Placeholder: futura integración para descargar factura
+                              toast.info("Descarga de factura próximamente");
+                            }}
+                          >
+                            Descargar Factura
+                          </Button>
                         )}
                       </td>
                     </tr>
@@ -363,13 +594,25 @@ export function ClienteReservas() {
           <DialogHeader>
             <DialogTitle>Crear Devolución</DialogTitle>
             <DialogDescription>
-              Completa los detalles de las herramientas que vas a devolver. Cliente actual se toma automáticamente.
+              Completa los detalles de las herramientas que vas a devolver.
+              Cliente actual se toma automáticamente.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Motivo de la devolución</Label>
+              <Textarea
+                placeholder="Escribe el motivo de la devolución..."
+                value={returnNotes}
+                onChange={(e) => setReturnNotes(e.target.value)}
+              />
+            </div>
+          </div>
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              Las cantidades a devolver no pueden exceder las cantidades reservadas. Verifica la condición de cada herramienta.
+              Las cantidades a devolver no pueden exceder las cantidades
+              reservadas. Verifica la condición de cada herramienta.
             </AlertDescription>
           </Alert>
           <div className="space-y-6">
@@ -378,7 +621,9 @@ export function ClienteReservas() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h4 className="font-medium">{detail.toolName}</h4>
-                    <p className="text-sm text-gray-500">Reservado: {detail.quantityReserved} unidades</p>
+                    <p className="text-sm text-gray-500">
+                      Reservado: {detail.quantityReserved} unidades
+                    </p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -393,7 +638,7 @@ export function ClienteReservas() {
                         const newDetails = [...returnDetails];
                         newDetails[index].quantityToReturn = Math.min(
                           Math.max(1, parseInt(e.target.value) || 1),
-                          detail.quantityReserved
+                          detail.quantityReserved,
                         );
                         setReturnDetails(newDetails);
                       }}
@@ -409,7 +654,7 @@ export function ClienteReservas() {
                   <Label>Notas</Label>
                   <Textarea
                     placeholder="Observaciones sobre esta herramienta..."
-                    value={detail.notes || ''}
+                    value={detail.notes || ""}
                     onChange={(e) => {
                       const newDetails = [...returnDetails];
                       newDetails[index].notes = e.target.value;
@@ -419,17 +664,12 @@ export function ClienteReservas() {
                 </div>
               </div>
             ))}
-            <div>
-              <Label>Notas Generales de la Devolución</Label>
-              <Textarea
-                placeholder="Observaciones generales..."
-                value={returnNotes}
-                onChange={(e) => setReturnNotes(e.target.value)}
-              />
-            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateReturn(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateReturn(false)}
+            >
               Cancelar
             </Button>
             <Button onClick={handleSubmitReturn}>
