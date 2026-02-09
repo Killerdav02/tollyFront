@@ -5,7 +5,7 @@ import { capLabel } from "./helpers";
 import { UiUser } from "./types";
 import { UserActionsMenu } from "./UserActionsMenu";
 
-interface Props {
+interface UsuariosTableDesktopProps {
     usuarios: UiUser[];
     openStatusModal: (u: UiUser) => void;
     openEditModal: (u: UiUser) => void;
@@ -23,7 +23,7 @@ export function UsuariosTableDesktop({
     error,
     filteredUsuarios,
     safeTotal,
-}: Props) {
+}: UsuariosTableDesktopProps) {
     if (error) return <div className="py-8 flex justify-center text-red-600">{error}</div>;
     if (filteredUsuarios.length === 0)
         return <div className="py-8 flex justify-center text-gray-500">No hay usuarios para este filtro.</div>;

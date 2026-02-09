@@ -3,14 +3,14 @@ import { capLabel, formatDateEs, getUserDate } from "./helpers";
 import { UiUser } from "./types";
 import { UserActionsMenu } from "./UserActionsMenu";
 
-interface Props {
+interface UsuariosCardsMobileProps {
     usuarios: UiUser[];
     openStatusModal: (u: UiUser) => void;
     openEditModal: (u: UiUser) => void;
     filteredUsuarios: UiUser[];
 }
 
-export function UsuariosCardsMobile({ usuarios, openStatusModal, openEditModal, filteredUsuarios }: Props) {
+export function UsuariosCardsMobile({ usuarios, openStatusModal, openEditModal, filteredUsuarios }: UsuariosCardsMobileProps) {
     if (filteredUsuarios.length === 0) return null;
     return (
         <div className="md:hidden space-y-4">
