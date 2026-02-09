@@ -6,6 +6,7 @@ import { UsuariosCardsMobile } from "./UsuariosCardsMobile";
 import { UsuariosPagination } from "./UsuariosPagination";
 import { UserStatusDialog } from "./UserStatusDialog";
 import { UserEditSheet } from "./UserEditSheet";
+import { UserCreateDialog } from "./UserCreateDialog";
 import { useAdminUsuarios } from "./useAdminUsuarios";
 import { UsuariosStatsCards } from "./UsuariosStatsCards";
 import { Card, CardHeader, CardContent } from '@/app/components/ui/card';
@@ -34,7 +35,7 @@ export default function AdminUsuariosPage() {
 
     return (
         <div className="space-y-6">
-            <UsuariosHeader />
+            <UsuariosHeader onCreate={adminUsuarios.openCreateModal} />
             <UsuariosFilters
                 searchTerm={adminUsuarios.searchTerm}
                 setSearchTerm={adminUsuarios.setSearchTerm}
@@ -123,6 +124,16 @@ export default function AdminUsuariosPage() {
                 editFormData={adminUsuarios.editFormData}
                 handleEditFormChange={adminUsuarios.handleEditFormChange}
                 handleSaveEdit={adminUsuarios.handleSaveEdit}
+            />
+            <UserCreateDialog
+                open={adminUsuarios.createModalOpen}
+                setOpen={adminUsuarios.setCreateModalOpen}
+                formData={adminUsuarios.createFormData}
+                onChange={adminUsuarios.handleCreateFormChange}
+                onRoleChange={adminUsuarios.handleCreateRoleChange}
+                onSubmit={adminUsuarios.handleCreateSubmit}
+                loading={adminUsuarios.createLoading}
+                error={adminUsuarios.createError}
             />
         </div>
     );

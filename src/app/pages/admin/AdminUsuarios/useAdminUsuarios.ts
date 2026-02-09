@@ -1,7 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { listAdminUsers, updateAdminUser } from "@/services/adminUsers";
-import { UiUser, UiRole, UiStatus } from "./types";
+import type { FormEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { createAdminClient, createAdminSupplier, listAdminUsers, updateAdminUser } from "@/services/adminUsers";
+import { CreateUserFormData, CreateUserRole, UiUser, UiRole, UiStatus } from "./types";
 import { mapApiUserToUiUser } from "./helpers";
+
+const createInitialForm: CreateUserFormData = {
+    role: "cliente",
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+    address: "",
+    document: "",
+    phone: "",
+    company: "",
+    identification: "",
+    contactName: "",
+};
 
 export function useAdminUsuarios() {
     const [searchTerm, setSearchTerm] = useState("");
@@ -17,6 +32,10 @@ export function useAdminUsuarios() {
     const [selectedUser, setSelectedUser] = useState<UiUser | null>(null);
     const [newStatus, setNewStatus] = useState<UiStatus>("activo");
     const [editFormData, setEditFormData] = useState<any>({});
+    const [createModalOpen, setCreateModalOpen] = useState(false);
+    const [createFormData, setCreateFormData] = useState<CreateUserFormData>({ ...createInitialForm });
+    const [createLoading, setCreateLoading] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
 
     const fetchUsuarios = useCallback(async () => {
         setLoading(true);
@@ -71,6 +90,110 @@ export function useAdminUsuarios() {
                     : {}
         );
         setEditModalOpen(true);
+    };
+
+    const handleCreateFormChange = (field: keyof CreateUserFormData, value: string) => {
+        setCreateFormData((prev) => ({ ...prev, [field]: value }));
+    };
+
+    const handleCreateRoleChange = (role: CreateUserRole) => {
+        setCreateFormData((prev) => ({
+            ...prev,
+            role,
+            firstName: role === "cliente" ? prev.firstName : "",
+            lastName: role === "cliente" ? prev.lastName : "",
+            address: role === "cliente" ? prev.address : "",
+            document: role === "cliente" ? prev.document : "",
+            company: role === "proveedor" ? prev.company : "",
+            identification: role === "proveedor" ? prev.identification : "",
+            contactName: role === "proveedor" ? prev.contactName : "",
+        }));
+    };
+
+    const openCreateModal = () => {
+        setCreateError(null);
+        setCreateModalOpen(true);
+    };
+
+    const handleCreateSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        setCreateError(null);
+
+        const email = createFormData.email.trim();
+        const password = createFormData.password;
+
+        if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+            setCreateError("Correo invalido.");
+            return;
+        }
+        if (!password || password.length < 6) {
+            setCreateError("La contrasena debe tener al menos 6 caracteres.");
+            return;
+        }
+
+        if (createFormData.role === "cliente") {
+            if (
+                !createFormData.firstName.trim() ||
+                !createFormData.lastName.trim() ||
+                !createFormData.address.trim() ||
+                !createFormData.document.trim() ||
+                !createFormData.phone.trim()
+            ) {
+                setCreateError("Completa los campos obligatorios del cliente.");
+                return;
+            }
+        } else {
+            if (
+                !createFormData.company.trim() ||
+                !createFormData.identification.trim() ||
+                !createFormData.contactName.trim() ||
+                !createFormData.phone.trim()
+            ) {
+                setCreateError("Completa los campos obligatorios del proveedor.");
+                return;
+            }
+        }
+
+        setCreateLoading(true);
+        try {
+            if (createFormData.role === "cliente") {
+                await createAdminClient({
+                    email,
+                    password,
+                    role: "CLIENT",
+                    firstName: createFormData.firstName.trim(),
+                    lastName: createFormData.lastName.trim(),
+                    address: createFormData.address.trim(),
+                    document: createFormData.document.trim(),
+                    phone: createFormData.phone.trim(),
+                    company: null,
+                    identification: null,
+                    contactName: null,
+                });
+            } else {
+                await createAdminSupplier({
+                    email,
+                    password,
+                    role: "SUPPLIER",
+                    firstName: null,
+                    lastName: null,
+                    address: null,
+                    document: null,
+                    phone: createFormData.phone.trim(),
+                    company: createFormData.company.trim(),
+                    identification: createFormData.identification.trim(),
+                    contactName: createFormData.contactName.trim(),
+                });
+            }
+
+            setCreateModalOpen(false);
+            setCreateFormData({ ...createInitialForm });
+            fetchUsuarios();
+        } catch (err: any) {
+            setCreateError(err?.response?.data?.message || err?.message || "No se pudo registrar el usuario.");
+        } finally {
+            setCreateLoading(false);
+        }
     };
 
     // Handler para cambios en el formulario de edición
@@ -153,9 +276,19 @@ export function useAdminUsuarios() {
         setNewStatus,
         editFormData,
         setEditFormData,
+        createModalOpen,
+        setCreateModalOpen,
+        createFormData,
+        setCreateFormData,
+        createLoading,
+        createError,
+        openCreateModal,
         fetchUsuarios,
         openStatusModal,
         openEditModal,
+        handleCreateFormChange,
+        handleCreateRoleChange,
+        handleCreateSubmit,
         handleEditFormChange,
         handleSaveEdit,
         handleSaveStatus,

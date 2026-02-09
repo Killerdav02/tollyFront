@@ -21,3 +21,19 @@ export interface UiUser {
         phone: string;
     };
 }
+
+export type CreateUserRole = "cliente" | "proveedor";
+
+export interface CreateUserFormData {
+    role: CreateUserRole;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    address: string;
+    document: string;
+    phone: string;
+    company: string;
+    identification: string;
+    contactName: string;
+}
