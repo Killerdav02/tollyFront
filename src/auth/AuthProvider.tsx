@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { login as loginApi, getMe, logout as logoutApi, LoginResponse, User } from "../services/authService";
+import { login as loginApi, getMe, logout as logoutApi, LoginResponse } from "../services/authService";
+import type { User } from "../services/types";
+
+const SUPPLIER_ID_KEY = "tolly_supplier_id";
 
 interface AuthContextType {
     user: User | null;
@@ -19,18 +22,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const resolveRole = (user: User) => {
+        const authorities = (user.roles || []).map((role) => role.authority);
+        if (authorities.includes("ROLE_ADMIN")) return "admin";
+        if (authorities.includes("ROLE_SUPPLIER")) return "proveedor";
+        if (authorities.includes("ROLE_CLIENT")) return "cliente";
+        return undefined;
+    };
+
     useEffect(() => {
         if (token) {
             setLoading(true);
             getMe()
                 .then((user) => {
-                    // Normalizar el rol para el frontend
-                    let role = undefined;
-                    if (user.roles && Array.isArray(user.roles) && user.roles.length > 0) {
-                        const roleName = user.roles[0].name;
-                        if (roleName === "ADMIN" || roleName.toLowerCase() === "admin") role = "admin";
-                        else if (roleName === "CLIENT" || roleName.toLowerCase() === "cliente" || roleName.toLowerCase() === "client") role = "cliente";
-                        else if (roleName === "SUPPLIER" || roleName.toLowerCase() === "proveedor" || roleName.toLowerCase() === "supplier") role = "proveedor";
+                    const role = resolveRole(user);
+                    if (user.supplier?.id) {
+                        localStorage.setItem(SUPPLIER_ID_KEY, String(user.supplier.id));
                     }
                     setUser({ ...user, rol: role });
                 })
@@ -55,12 +62,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             // Obtener datos del usuario tras login
             const user = await getMe();
             console.log('User after login:', user);
-            let role = undefined;
-            if (user.roles && Array.isArray(user.roles) && user.roles.length > 0) {
-                const roleName = user.roles[0].name?.toLowerCase();
-                if (roleName === "admin") role = "admin";
-                else if (roleName === "cliente" || roleName === "client") role = "cliente";
-                else if (roleName === "proveedor" || roleName === "supplier") role = "proveedor";
+            const role = resolveRole(user);
+            if (user.supplier?.id) {
+                localStorage.setItem(SUPPLIER_ID_KEY, String(user.supplier.id));
             }
             setUser({ ...user, rol: role });
         } catch (err: any) {

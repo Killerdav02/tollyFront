@@ -1,321 +1,238 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Textarea } from '@/app/components/ui/textarea';
+import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
-import { reservas, returns } from '@/app/data/mockData';
-import { useAuth } from '../../../auth/useAuth';
-import { ReservationStatusBadge, ReturnStatusBadge, getReturnStatusMessage } from '@/app/components/StatusBadges';
-import { ReturnTimeline } from '@/app/components/ReturnTimeline';
-import { Check, X, Calendar, Package, PackageCheck, AlertTriangle, Eye } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
+import { ReservationStatusBadge, ReturnStatusBadge } from '@/app/components/StatusBadges';
+import { AlertTriangle, Eye } from 'lucide-react';
 import { toast } from 'sonner';
+import { listReturns, receiveReturn, getReturnById } from '../../../services/returnService';
+import { listReservationsBySupplier } from '../../../services/reservationService';
+import { listTools } from '../../../services/toolService';
+import type { ReturnResponse, Reservation, PageResponse } from '../../../services/types';
+
+const SUPPLIER_ID_KEY = 'tolly_supplier_id';
+
+const returnStatusLabels: Record<string, string> = {
+  PENDING: 'Pendiente',
+  SENT: 'Enviada',
+  RECEIVED: 'Recibida',
+  DAMAGED: 'DaÒada',
+  CL_DAMAGED: 'Cliente reporta daÒo',
+  CL_INCOMPLETE: 'Cliente reporta incompleto',
+  SPP_INCOMPLETE: 'Proveedor confirma incompleto',
+};
+
+const proveedorAcciones = [
+  { code: 'RECEIVED', label: 'Recibir sin novedades' },
+  { code: 'DAMAGED', label: 'Recibir con daÒo' },
+  { code: 'SPP_INCOMPLETE', label: 'Recibir incompleto' },
+];
+
+function normalizeReturnStatus(status?: string): 'PENDING' | 'SENT' | 'RECEIVED' | 'DAMAGED' | 'CL_DAMAGED' | 'CL_INCOMPLETE' | 'SPP_INCOMPLETE' {
+  const normalized = (status || '').toUpperCase();
+  if (['CL_DAMAGED', 'CL_INCOMPLETE', 'SPP_INCOMPLETE'].includes(normalized)) return normalized as any;
+  if (['SENT', 'ENVIADA', 'ENVIADO'].includes(normalized)) return 'SENT';
+  if (['RECEIVED', 'RECIBIDA', 'RECIBIDO'].includes(normalized)) return 'RECEIVED';
+  if (['DAMAGED', 'DANADA', 'DA—ADA'].includes(normalized)) return 'DAMAGED';
+  return 'PENDING';
+}
+
+function normalizeReservationStatus(status?: string) {
+  const normalized = (status || '').toUpperCase();
+  if (['PENDING', 'PENDIENTE'].includes(normalized)) return 'PENDING';
+  if (['CONFIRMED', 'CONFIRMADA'].includes(normalized)) return 'CONFIRMED';
+  if (['IN_PROGRESS', 'EN_CURSO'].includes(normalized)) return 'IN_PROGRESS';
+  if (['FINISHED', 'FINALIZADA'].includes(normalized)) return 'FINISHED';
+  if (['CANCELLED', 'CANCELADA'].includes(normalized)) return 'CANCELLED';
+  if (['IN_INCIDENT', 'INCIDENCIA'].includes(normalized)) return 'IN_INCIDENT';
+  return 'PENDING';
+}
 
 export function ProveedorReservas() {
-  const { user } = useAuth();
-  const [showReturnDetails, setShowReturnDetails] = useState<string | null>(null);
-  const [damageNotes, setDamageNotes] = useState('');
+  const [returns, setReturns] = useState<ReturnResponse[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [reservationPage, setReservationPage] = useState<PageResponse<Reservation> | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedReturn, setSelectedReturn] = useState<ReturnResponse | null>(null);
+  const [detailReturn, setDetailReturn] = useState<ReturnResponse | null>(null);
+  const [observations, setObservations] = useState('');
+  const [selectedAction, setSelectedAction] = useState<'RECEIVED' | 'DAMAGED' | 'SPP_INCOMPLETE' | ''>('');
 
-  const misReservas = reservas.filter(r => r.proveedorId === user?.id);
-  const misReturnos = returns.filter(r => r.proveedorId === user?.id);
+  const [filters, setFilters] = useState({
+    statusName: 'all',
+    from: '',
+    to: '',
+  });
 
-  const handleAceptar = (id: string) => {
-    toast.success('Reserva aceptada y confirmada');
+  const supplierId = useMemo(() => {
+    const stored = localStorage.getItem(SUPPLIER_ID_KEY);
+    if (stored && !Number.isNaN(Number(stored))) return Number(stored);
+    return null;
+  }, []);
+
+  const resolveSupplierIdFromTools = async (): Promise<number | null> => {
+    const tools = await listTools();
+    const unique = Array.from(new Set(tools.map((tool) => tool.supplierId)));
+    if (unique.length === 1) {
+      localStorage.setItem(SUPPLIER_ID_KEY, String(unique[0]));
+      return unique[0];
+    }
+    return null;
   };
 
-  const handleRechazar = (id: string) => {
-    toast.error('Reserva rechazada');
-  };
-
-  const handleReceiveOk = (returnId: string) => {
-    toast.success('Devoluci√≥n recibida OK. Reserva finalizada y herramientas disponibles nuevamente.');
-  };
-
-  const handleReceiveDamaged = (returnId: string) => {
-    if (!damageNotes.trim()) {
-      toast.error('Debes proporcionar notas sobre el da√±o');
+  const loadReservations = async (page = 0) => {
+    let resolvedSupplierId = supplierId;
+    if (!resolvedSupplierId) {
+      try {
+        resolvedSupplierId = await resolveSupplierIdFromTools();
+      } catch {
+        resolvedSupplierId = null;
+      }
+    }
+    if (!resolvedSupplierId) {
+      setError('No se pudo determinar tu proveedor. Crea una herramienta primero.');
       return;
     }
-    toast.error('Devoluci√≥n recibida con da√±o. Reserva pas√≥ a IN_INCIDENT y herramientas a UNDER_REPAIR.');
-    setDamageNotes('');
-    setShowReturnDetails(null);
+    setLoading(true);
+    setError(null);
+    try {
+      const from = filters.from ? `${filters.from}T00:00:00` : undefined;
+      const to = filters.to ? `${filters.to}T23:59:59` : undefined;
+      const data = await listReservationsBySupplier({
+        supplierId: resolvedSupplierId,
+        statusName: filters.statusName === 'all' ? undefined : filters.statusName,
+        from,
+        to,
+        page,
+        size: 10,
+        sort: 'createdAt,desc',
+      });
+      setReservations(data.content || []);
+      setReservationPage(data);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || 'No se pudieron cargar las reservas.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const loadReturns = async () => {
+      try {
+        const data = await listReturns();
+        setReturns(data);
+      } catch (err: any) {
+        setError(err?.response?.data?.message || 'No se pudieron cargar las devoluciones.');
+      }
+    };
+    loadReturns();
+    loadReservations(0);
+  }, [supplierId]);
+
+  const pendingReturns = useMemo(
+    () => returns.filter((ret) => ['SENT', 'CL_DAMAGED', 'CL_INCOMPLETE'].includes(normalizeReturnStatus(ret.returnStatusName))),
+    [returns]
+  );
+
+  const openManageReturn = async (ret: ReturnResponse) => {
+    if (!['SENT', 'CL_DAMAGED', 'CL_INCOMPLETE'].includes(normalizeReturnStatus(ret.returnStatusName))) {
+      toast.error('Solo puedes recibir devoluciones en estado SENT o con reporte del cliente.');
+      return;
+    }
+    setSelectedReturn(ret);
+    setSelectedAction('');
+    setObservations('');
+    try {
+      const detail = await getReturnById(ret.id);
+      setDetailReturn(detail);
+    } catch {
+      setDetailReturn(ret);
+    }
+  };
+
+  const handleReceive = async () => {
+    if (!selectedReturn) return;
+    if (!selectedAction) {
+      toast.error('Selecciona el estado final de la devoluciÛn.');
+      return;
+    }
+    try {
+      await receiveReturn(selectedReturn.id, {
+        returnStatusName: selectedAction,
+        observations: observations || undefined,
+      });
+      toast.success(returnStatusLabels[selectedAction] || 'AcciÛn registrada.');
+      setSelectedReturn(null);
+      setDetailReturn(null);
+      setObservations('');
+      setSelectedAction('');
+      const updated = await listReturns();
+      setReturns(updated);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'No se pudo actualizar la devoluciÛn.');
+    }
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-[#3d5a5a]">Mis Reservas</h1>
-        <p className="text-gray-600 mt-1">Gestiona las solicitudes de alquiler</p>
+        <p className="text-gray-600 mt-1">Gestiona reservas y devoluciones de tus herramientas</p>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-600">Total Reservas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{misReservas.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-600">Pendientes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {misReservas.filter(r => r.estado === 'PENDING').length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-600">Activas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-[#7fb3b0]">
-              {misReservas.filter(r => r.estado === 'CONFIRMED' || r.estado === 'IN_PROGRESS').length}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-600">Finalizadas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-[#3d5a5a]">
-              {misReservas.filter(r => r.estado === 'FINISHED').length}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Devoluciones para Recibir */}
-      {misReturnos.filter(r => r.status === 'SENT').length > 0 && (
-        <Card className="border-blue-200">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Package className="w-5 h-5 mr-2 text-blue-600" />
-              Devoluciones por Recibir
-            </CardTitle>
-            <CardDescription>
-              Los clientes han enviado estas herramientas. Debes confirmar su recepci√≥n.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Alert className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Importante:</strong> Al recibir, verifica el estado de las herramientas. Si est√°n en buen estado, marca como "Recibido OK". Si hay da√±os, reporta el da√±o.
-              </AlertDescription>
-            </Alert>
-            <div className="space-y-4">
-              {misReturnos
-                .filter(r => r.status === 'SENT')
-                .map((ret) => {
-                  const reservation = reservas.find(r => r.id === ret.reservationId);
-                  return (
-                    <div
-                      key={ret.id}
-                      className="flex flex-col gap-4 p-4 bg-blue-50 rounded-lg border border-blue-100"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-semibold text-gray-900">
-                              Devoluci√≥n #{ret.id.slice(0, 8)}
-                            </h3>
-                            <ReturnStatusBadge status={ret.status} />
-                          </div>
-                          <p className="text-sm text-gray-600 mb-1">
-                            Cliente: {ret.clienteNombre}
-                          </p>
-                          <p className="text-sm text-gray-600 mb-2">
-                            Herramientas: {ret.details.map(d => `${d.toolName} (x${d.quantityToReturn})`).join(', ')}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {getReturnStatusMessage(ret.status)}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button variant="outline" size="sm" onClick={() => setShowReturnDetails(ret.id)}>
-                                <Eye className="w-4 h-4 mr-1" />
-                                Ver Detalles
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-2xl">
-                              <DialogHeader>
-                                <DialogTitle>Recibir Devoluci√≥n #{ret.id.slice(0, 8)}</DialogTitle>
-                                <DialogDescription>
-                                  Verifica el estado de las herramientas y confirma la recepci√≥n
-                                </DialogDescription>
-                              </DialogHeader>
-                              <div className="space-y-6">
-                                <ReturnTimeline
-                                  status={ret.status}
-                                  createdAt={ret.createdAt}
-                                  sentAt={ret.sentAt}
-                                  receivedAt={ret.receivedAt}
-                                />
-                                <div>
-                                  <h4 className="font-medium mb-3">Herramientas Devueltas</h4>
-                                  <div className="space-y-2">
-                                    {ret.details.map((detail) => (
-                                      <div key={detail.id} className="p-3 bg-gray-50 rounded border">
-                                        <div className="flex justify-between items-start mb-2">
-                                          <div>
-                                            <p className="font-medium">{detail.toolName}</p>
-                                            <p className="text-sm text-gray-600">
-                                              Cantidad devuelta: {detail.quantityToReturn} de {detail.quantityReserved}
-                                            </p>
-                                          </div>
-                                        </div>
-                                        {detail.notes && (
-                                          <div className="mt-2 p-2 bg-white rounded">
-                                            <p className="text-xs text-gray-500 mb-1">Notas del cliente:</p>
-                                            <p className="text-sm text-gray-600">{detail.notes}</p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                                <Alert>
-                                  <AlertTriangle className="h-4 w-4" />
-                                  <AlertDescription>
-                                    Si hay da√±o, escribe notas detalladas abajo. La reserva pasar√° a estado IN_INCIDENT y las herramientas a UNDER_REPAIR.
-                                  </AlertDescription>
-                                </Alert>
-                                <div>
-                                  <Label>Notas sobre Da√±o (si aplica)</Label>
-                                  <Textarea
-                                    placeholder="Describe los da√±os encontrados..."
-                                    value={damageNotes}
-                                    onChange={(e) => setDamageNotes(e.target.value)}
-                                  />
-                                </div>
-                              </div>
-                              <DialogFooter className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  onClick={() => {
-                                    setShowReturnDetails(null);
-                                    setDamageNotes('');
-                                  }}
-                                >
-                                  Cancelar
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  onClick={() => handleReceiveDamaged(ret.id)}
-                                  className="bg-red-600 hover:bg-red-700"
-                                >
-                                  <AlertTriangle className="w-4 h-4 mr-1" />
-                                  Reportar Da√±o
-                                </Button>
-                                <Button
-                                  onClick={() => handleReceiveOk(ret.id)}
-                                  className="bg-green-600 hover:bg-green-700"
-                                >
-                                  <PackageCheck className="w-4 h-4 mr-1" />
-                                  Recibir OK
-                                </Button>
-                              </DialogFooter>
-                            </DialogContent>
-                          </Dialog>
-                          <Button
-                            size="sm"
-                            onClick={() => handleReceiveOk(ret.id)}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            <PackageCheck className="w-4 h-4 mr-1" />
-                            Recibir OK
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-          </CardContent>
-        </Card>
+      {error && (
+        <Alert className="border-red-200">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Reservas Pendientes */}
-      {misReservas.filter(r => r.estado === 'PENDING').length > 0 && (
-        <Card className="border-yellow-200">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Calendar className="w-5 h-5 mr-2 text-yellow-600" />
-              Reservas Pendientes de Confirmaci√≥n
-            </CardTitle>
-            <CardDescription>
-              Estas reservas requieren tu aprobaci√≥n
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {misReservas
-                .filter(r => r.estado === 'PENDING')
-                .map((reserva) => (
-                  <div
-                    key={reserva.id}
-                    className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-4 bg-yellow-50 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">Reserva #{reserva.id}</h3>
-                        <ReservationStatusBadge status={reserva.estado} />
-                      </div>
-                      <div className="space-y-1 mb-2">
-                        {reserva.details.map(detail => (
-                          <p key={detail.id} className="text-sm text-gray-700">
-                            ‚Ä¢ {detail.toolName} x{detail.quantity}
-                          </p>
-                        ))}
-                      </div>
-                      <p className="text-sm text-gray-600 mb-1">Cliente: {reserva.clienteNombre}</p>
-                      <p className="text-sm text-gray-500">
-                        Periodo: {new Date(reserva.fechaInicio).toLocaleDateString('es-ES')} - {new Date(reserva.fechaFin).toLocaleDateString('es-ES')}
-                      </p>
-                      <p className="text-sm font-medium text-gray-900 mt-1">
-                        Total: ${reserva.precioTotal}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleAceptar(reserva.id)}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        <Check className="w-4 h-4 mr-1" />
-                        Aceptar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleRechazar(reserva.id)}
-                        className="border-red-600 text-red-600 hover:bg-red-50"
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        Rechazar
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Todas las Reservas */}
       <Card>
         <CardHeader>
-          <CardTitle>Todas las Reservas</CardTitle>
-          <CardDescription>Historial completo de reservas de tus herramientas</CardDescription>
+          <CardTitle>Filtros de reservas</CardTitle>
+          <CardDescription>Filtra por estado o rango de fechas.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+              <Label className="text-sm">Estado</Label>
+              <select
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={filters.statusName}
+                onChange={(e) => setFilters((prev) => ({ ...prev, statusName: e.target.value }))}
+              >
+                <option value="all">Todos</option>
+                <option value="PENDING">Pendiente</option>
+                <option value="CONFIRMED">Confirmada</option>
+                <option value="IN_PROGRESS">En curso</option>
+                <option value="FINISHED">Finalizada</option>
+                <option value="CANCELLED">Cancelada</option>
+                <option value="IN_INCIDENT">Incidente</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-sm">Desde</Label>
+              <Input type="date" value={filters.from} onChange={(e) => setFilters((prev) => ({ ...prev, from: e.target.value }))} />
+            </div>
+            <div>
+              <Label className="text-sm">Hasta</Label>
+              <Input type="date" value={filters.to} onChange={(e) => setFilters((prev) => ({ ...prev, to: e.target.value }))} />
+            </div>
+            <Button onClick={() => loadReservations(0)} className="bg-[#7fb3b0] hover:bg-[#6da39f]">
+              Buscar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reservas del Proveedor</CardTitle>
+          <CardDescription>Listado paginado de reservas asociadas a tus herramientas.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -323,41 +240,249 @@ export function ProveedorReservas() {
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-3 px-4 font-medium text-gray-600">ID</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-600">Herramientas</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Cliente</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Periodo</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-600">Total</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Total</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Estado</th>
                 </tr>
               </thead>
               <tbody>
-                {misReservas.map((reserva) => (
+                {reservations.map((reserva) => (
                   <tr key={reserva.id} className="border-b hover:bg-gray-50">
                     <td className="py-3 px-4 text-gray-600">#{reserva.id}</td>
-                    <td className="py-3 px-4">
-                      <div className="space-y-1">
-                        {reserva.details.map(detail => (
-                          <p key={detail.id} className="text-sm">
-                            {detail.toolName} (x{detail.quantity})
-                          </p>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">{reserva.clienteNombre}</td>
+                    <td className="py-3 px-4 text-gray-600">#{reserva.clientId}</td>
                     <td className="py-3 px-4 text-gray-600 text-sm">
-                      {new Date(reserva.fechaInicio).toLocaleDateString('es-ES')} - {new Date(reserva.fechaFin).toLocaleDateString('es-ES')}
+                      {new Date(reserva.startDate).toLocaleDateString('es-ES')} - {new Date(reserva.endDate).toLocaleDateString('es-ES')}
                     </td>
-                    <td className="py-3 px-4 text-right font-medium">${reserva.precioTotal}</td>
+                    <td className="py-3 px-4 text-gray-600">${Number(reserva.total).toLocaleString()}</td>
                     <td className="py-3 px-4">
-                      <ReservationStatusBadge status={reserva.estado} />
+                      <ReservationStatusBadge status={normalizeReservationStatus(reserva.statusName)} />
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {!loading && reservations.length === 0 && (
+            <p className="text-sm text-gray-500 mt-4">No hay reservas para los filtros seleccionados.</p>
+          )}
+          {reservationPage && (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-gray-500">
+                P·gina {reservationPage.number + 1} de {reservationPage.totalPages}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={reservationPage.first}
+                  onClick={() => loadReservations(reservationPage.number - 1)}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={reservationPage.last}
+                  onClick={() => loadReservations(reservationPage.number + 1)}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-gray-600">Total Devoluciones</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{returns.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-gray-600">Pendientes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{pendingReturns.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-gray-600">Recibidas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-[#7fb3b0]">
+              {returns.filter((ret) => normalizeReturnStatus(ret.returnStatusName) === 'RECEIVED').length}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {pendingReturns.length > 0 && (
+        <Card className="border-blue-200">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <AlertTriangle className="w-5 h-5 mr-2 text-blue-600" />
+              Devoluciones por Recibir
+            </CardTitle>
+            <CardDescription>
+              El proveedor solo puede recibir devoluciones en estado SENT o reportadas por el cliente.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Alert className="mb-4">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Si la devoluciÛn es parcial la reserva sigue IN_PROGRESS. Si es total: RECEIVED ? FINISHED, DAMAGED o SPP_INCOMPLETE ? IN_INCIDENT.
+              </AlertDescription>
+            </Alert>
+            <div className="space-y-4">
+              {pendingReturns.map((ret) => (
+                <div
+                  key={ret.id}
+                  className="flex flex-col gap-4 p-4 bg-blue-50 rounded-lg border border-blue-100"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="font-semibold text-gray-900">DevoluciÛn #{ret.id}</h3>
+                        <ReturnStatusBadge status={normalizeReturnStatus(ret.returnStatusName)} />
+                      </div>
+                      <p className="text-sm text-gray-600 mb-1">Reserva: #{ret.reservationId}</p>
+                      <p className="text-sm text-gray-500">Estado: {returnStatusLabels[normalizeReturnStatus(ret.returnStatusName)]}</p>
+                      <p className="text-sm text-gray-500">Observaciones: {ret.observations || 'Sin observaciones'}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openManageReturn(ret)}
+                      >
+                        <Eye className="w-4 h-4 mr-1" />
+                        Gestionar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Historial de Devoluciones</CardTitle>
+          <CardDescription>Registro completo de devoluciones asociadas</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">ID</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Reserva</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Estado</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-600">Fecha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {returns.map((ret) => (
+                  <tr key={ret.id} className="border-b hover:bg-gray-50">
+                    <td className="py-3 px-4 text-gray-600">#{ret.id}</td>
+                    <td className="py-3 px-4 text-gray-600">#{ret.reservationId}</td>
+                    <td className="py-3 px-4">
+                      <ReturnStatusBadge status={normalizeReturnStatus(ret.returnStatusName)} />
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">
+                      {ret.returnDate ? new Date(ret.returnDate).toLocaleDateString('es-ES') : 'N/A'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {loading && <p className="text-sm text-gray-500 mt-4">Cargando devoluciones...</p>}
+        </CardContent>
+      </Card>
+
+      <Dialog open={Boolean(selectedReturn)} onOpenChange={(open) => !open && setSelectedReturn(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Recibir devoluciÛn #{selectedReturn?.id}</DialogTitle>
+            <DialogDescription>
+              Selecciona el estado final y registra observaciones generales.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium">Estado actual</Label>
+              <p className="text-sm text-gray-600">{detailReturn ? returnStatusLabels[normalizeReturnStatus(detailReturn.returnStatusName)] : 'Cargando...'}</p>
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium">Herramientas reportadas (solo lectura)</Label>
+              <div className="mt-2 space-y-2">
+                {detailReturn?.details && detailReturn.details.length > 0 ? (
+                  detailReturn.details.map((detail, index) => (
+                    <div key={`${detail.toolId}-${index}`} className="p-3 border rounded-md bg-gray-50">
+                      <p className="text-sm text-gray-700">Tool ID: {detail.toolId}</p>
+                      <p className="text-sm text-gray-700">Cantidad: {detail.quantity}</p>
+                      <p className="text-sm text-gray-500">Observaciones: {detail.observations || 'Sin observaciones'}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No hay herramientas reportadas.</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium">Estado final (obligatorio)</Label>
+              <div className="flex flex-col gap-2 mt-2">
+                {proveedorAcciones.map((accion) => (
+                  <label key={accion.code} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="returnStatus"
+                      value={accion.code}
+                      checked={selectedAction === accion.code}
+                      onChange={() => setSelectedAction(accion.code as any)}
+                    />
+                    {accion.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label>Observaciones generales (opcional)</Label>
+              <Textarea
+                placeholder="Observaciones generales..."
+                value={observations}
+                onChange={(e) => setObservations(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setSelectedReturn(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleReceive}
+              className="bg-[#7fb3b0] hover:bg-[#6da39f]"
+            >
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

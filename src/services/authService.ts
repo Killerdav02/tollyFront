@@ -1,5 +1,6 @@
 // src/services/authService.ts
 import apiClient from "../api/apiClient";
+import type { User } from "./types";
 
 // Ajusta el tipo según la respuesta real de tu backend
 export interface LoginResponse {
@@ -8,13 +9,6 @@ export interface LoginResponse {
     tokenType: string;
     expiresIn: number;
 }
-
-export interface User {
-    id: string;
-    email: string;
-    [key: string]: any;
-}
-
 
 export async function login(credentials: { email: string; password: string }): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>("/auth/login", credentials);

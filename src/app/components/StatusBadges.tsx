@@ -1,5 +1,15 @@
 import { Badge } from './ui/badge';
-import { ToolStatus, ReservationStatus, ReturnStatus } from '../data/mockData';
+
+export type ToolStatus = 'AVAILABLE' | 'RENTED' | 'UNDER_REPAIR' | 'UNAVAILABLE';
+export type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'FINISHED' | 'CANCELLED' | 'IN_INCIDENT';
+export type ReturnStatus =
+  | 'PENDING'
+  | 'SENT'
+  | 'RECEIVED'
+  | 'DAMAGED'
+  | 'CL_DAMAGED'
+  | 'CL_INCOMPLETE'
+  | 'SPP_INCOMPLETE';
 
 // Badge para estados de herramientas
 export function ToolStatusBadge({ status }: { status: ToolStatus }) {
@@ -7,9 +17,14 @@ export function ToolStatusBadge({ status }: { status: ToolStatus }) {
     AVAILABLE: { label: 'Disponible', variant: 'default' as const, className: 'bg-[#7fb3b0] hover:bg-[#6da39f] text-white' },
     RENTED: { label: 'Alquilada', variant: 'secondary' as const, className: 'bg-[#3d5a5a] hover:bg-[#2a4644] text-white' },
     UNDER_REPAIR: { label: 'En Reparación', variant: 'destructive' as const, className: 'bg-orange-500 hover:bg-orange-600' },
+    UNAVAILABLE: { label: 'No Disponible', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
   };
 
-  const { label, variant, className } = config[status];
+  const { label, variant, className } = config[status] || {
+    label: status,
+    variant: 'secondary' as const,
+    className: 'bg-gray-200 text-gray-800',
+  };
   return <Badge variant={variant} className={className}>{label}</Badge>;
 }
 
@@ -24,20 +39,31 @@ export function ReservationStatusBadge({ status }: { status: ReservationStatus }
     IN_INCIDENT: { label: 'Con Incidente', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
   };
 
-  const { label, variant, className } = config[status];
+  const { label, variant, className } = config[status] || {
+    label: status,
+    variant: 'secondary' as const,
+    className: 'bg-gray-200 text-gray-800',
+  };
   return <Badge variant={variant} className={className}>{label}</Badge>;
 }
 
 // Badge para estados de devoluciones
 export function ReturnStatusBadge({ status }: { status: ReturnStatus }) {
   const config = {
-    PENDING: { label: 'Creada', variant: 'secondary' as const, className: 'bg-yellow-500 hover:bg-yellow-600 text-white' },
+    PENDING: { label: 'Pendiente', variant: 'secondary' as const, className: 'bg-yellow-500 hover:bg-yellow-600 text-white' },
     SENT: { label: 'Enviada', variant: 'default' as const, className: 'bg-[#3d5a5a] hover:bg-[#2a4644] text-white' },
-    RECEIVED: { label: 'Recibida OK', variant: 'default' as const, className: 'bg-[#7fb3b0] hover:bg-[#6da39f] text-white' },
-    DAMAGED: { label: 'Con Daño', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
+    RECEIVED: { label: 'Recibida', variant: 'default' as const, className: 'bg-[#7fb3b0] hover:bg-[#6da39f] text-white' },
+    DAMAGED: { label: 'Dañada', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
+    CL_DAMAGED: { label: 'Cliente reporta daño', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
+    CL_INCOMPLETE: { label: 'Cliente reporta incompleto', variant: 'secondary' as const, className: 'bg-yellow-500 hover:bg-yellow-600 text-white' },
+    SPP_INCOMPLETE: { label: 'Proveedor confirma incompleto', variant: 'secondary' as const, className: 'bg-yellow-500 hover:bg-yellow-600 text-white' },
   };
 
-  const { label, variant, className } = config[status];
+  const { label, variant, className } = config[status] || {
+    label: status,
+    variant: 'secondary' as const,
+    className: 'bg-gray-200 text-gray-800',
+  };
   return <Badge variant={variant} className={className}>{label}</Badge>;
 }
 
@@ -57,10 +83,13 @@ export function getReservationStatusMessage(status: ReservationStatus): string {
 // Mensajes de explicación de estados de devolución
 export function getReturnStatusMessage(status: ReturnStatus): string {
   const messages = {
-    PENDING: 'Devolución creada. Esperando que el cliente confirme el envío.',
-    SENT: 'El cliente confirmó el envío. Esperando que el proveedor reciba las herramientas.',
-    RECEIVED: 'El proveedor recibió las herramientas en buen estado. Reserva finalizada.',
-    DAMAGED: 'El proveedor reportó daño en las herramientas. Se ha creado un incidente.',
+    PENDING: 'Devolución pendiente.',
+    SENT: 'El cliente confirmó el envío. Esperando recepción del proveedor.',
+    RECEIVED: 'Recibido correctamente. La reserva pasa a FINISHED.',
+    DAMAGED: 'Daños confirmados. La reserva pasa a IN_INCIDENT.',
+    CL_DAMAGED: 'Cliente reporta daño antes de envío.',
+    CL_INCOMPLETE: 'Cliente reporta devolución incompleta.',
+    SPP_INCOMPLETE: 'Proveedor confirma devolución incompleta. La reserva pasa a IN_INCIDENT.',
   };
   return messages[status];
 }
