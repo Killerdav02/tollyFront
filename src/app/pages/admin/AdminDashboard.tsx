@@ -121,18 +121,30 @@ export function AdminDashboard() {
               {reservas.slice(0, 5).map((reserva) => (
                 <div key={reserva.id} className="flex items-center justify-between pb-4 border-b last:border-0">
                   <div>
-                    <p className="font-medium text-gray-900">{reserva.herramientaNombre}</p>
+                    <p className="font-medium text-gray-900">{reserva.details[0]?.toolName}</p>
                     <p className="text-sm text-gray-500">{reserva.clienteNombre}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-medium text-gray-900">${reserva.precioTotal}</p>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      reserva.estado === 'confirmada' ? 'bg-green-100 text-green-800' :
-                      reserva.estado === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {reserva.estado}
-                    </span>
+                    {(() => {
+                      const estadoLabel = {
+                        CONFIRMED: 'confirmada',
+                        PENDING: 'pendiente',
+                        IN_PROGRESS: 'en progreso',
+                        FINISHED: 'finalizada',
+                        CANCELLED: 'cancelada',
+                        IN_INCIDENT: 'incidente'
+                      }[reserva.estado] ?? reserva.estado;
+                      return (
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          reserva.estado === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
+                          reserva.estado === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {estadoLabel}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               ))}

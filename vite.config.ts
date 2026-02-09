@@ -20,4 +20,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/payments': 'http://localhost:8080',
+      '/api': 'http://localhost:8080',
+    },
+  },
 })

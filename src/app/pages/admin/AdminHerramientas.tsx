@@ -14,7 +14,7 @@ export function AdminHerramientas() {
 
   const filteredHerramientas = herramientas.filter(h => {
     const matchSearch = h.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       h.categoria.toLowerCase().includes(searchTerm.toLowerCase());
+      h.categoria.toLowerCase().includes(searchTerm.toLowerCase());
     const matchCategoria = filtroCategoria === 'todas' || h.categoria === filtroCategoria;
     return matchSearch && matchCategoria;
   });
@@ -104,7 +104,7 @@ export function AdminHerramientas() {
             <CardContent>
               <div className="space-y-3">
                 <p className="text-sm text-gray-600 line-clamp-2">{herramienta.descripcion}</p>
-                
+
                 <div className="flex justify-between items-center py-2 border-t">
                   <span className="text-sm text-gray-500">Estado:</span>
                   <span className={`text-xs px-2 py-1 rounded-full ${getEstadoBadgeColor(herramienta.status)}`}>
