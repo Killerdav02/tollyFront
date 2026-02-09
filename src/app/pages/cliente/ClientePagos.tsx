@@ -1,24 +1,249 @@
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Button } from '@/app/components/ui/button';
-import { Input } from '@/app/components/ui/input';
-import { Label } from '@/app/components/ui/label';
-import { Badge } from '@/app/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
-import { reservas } from '@/app/data/mockData';
-import { CreditCard, Download, DollarSign, Calendar } from 'lucide-react';
-import { toast } from 'sonner';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import { Input } from "@/app/components/ui/input";
+import { Label } from "@/app/components/ui/label";
+import { Badge } from "@/app/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/app/components/ui/dialog";
+import { CreditCard, Download, DollarSign, Calendar } from "lucide-react";
+import { toast } from "sonner";
+import apiClient from "@/api/apiClient";
+import { useAuth } from "@/auth/useAuth";
 
 export function ClientePagos() {
-  const misReservas = reservas.filter(r => r.clienteId === '3');
-  const reservasConPago = misReservas.filter(r => r.metodoPago);
-  const totalGastado = misReservas.reduce((sum, r) => sum + r.precioTotal, 0);
-  const [selectedReserva, setSelectedReserva] = useState<typeof reservas[0] | null>(null);
+  const { user } = useAuth();
+  type ReservaUI = {
+    id: string;
+    herramientaNombre: string;
+    fechaInicio?: string;
+    fechaFin?: string;
+    precioTotal: number;
+    estado: string;
+  };
 
-  const handlePago = (metodoPago: string) => {
+  type PagoUI = {
+    id: string;
+    reservationId: string;
+    metodoPago?: string;
+    monto: number;
+    estado?: string;
+    fecha?: string;
+  };
+
+  const [reservas, setReservas] = useState<ReservaUI[]>([]);
+  const [pagos, setPagos] = useState<PagoUI[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+  const [errorData, setErrorData] = useState<string | null>(null);
+  const [selectedPago, setSelectedPago] = useState<PagoUI | null>(null);
+  const [showPagoDialog, setShowPagoDialog] = useState(false);
+  const [selectedReserva, setSelectedReserva] = useState<ReservaUI | null>(
+    null,
+  );
+  const [loadingPago, setLoadingPago] = useState(false);
+
+  const normalizeStatus = (status?: string) =>
+    status ? status.toUpperCase() : "";
+
+  const formatDate = (value?: string) =>
+    value ? new Date(value).toLocaleDateString("es-ES") : "-";
+
+  const fetchPagosData = useCallback(async () => {
+    const clientId = user?.client?.id;
+    if (!clientId) return;
+    setLoadingData(true);
+    setErrorData(null);
+    try {
+      const [reservasRes, pagosRes] = await Promise.all([
+        apiClient.get(`/api/reservations/client/${clientId}`),
+        apiClient.get(`/payments/client/${clientId}`),
+      ]);
+
+      const reservasData: ReservaUI[] = Array.isArray(reservasRes.data)
+        ? reservasRes.data.map((reserva: any) => {
+            const toolName =
+              reserva.toolName ||
+              reserva.tool?.name ||
+              reserva.details?.[0]?.toolName ||
+              reserva.tools?.[0]?.name ||
+              `Reserva #${reserva.id}`;
+            return {
+              id: String(reserva.id),
+              herramientaNombre: toolName,
+              fechaInicio:
+                reserva.startDate || reserva.fechaInicio || reserva.start_date,
+              fechaFin: reserva.endDate || reserva.fechaFin || reserva.end_date,
+              precioTotal: Number(
+                reserva.totalPrice ??
+                  reserva.precioTotal ??
+                  reserva.total_price ??
+                  0,
+              ),
+              estado: normalizeStatus(
+                reserva.statusName || reserva.status || reserva.estado,
+              ),
+            };
+          })
+        : [];
+
+      const pagosData: PagoUI[] = Array.isArray(pagosRes.data)
+        ? pagosRes.data.map((pago: any) => ({
+            id: String(pago.id),
+            reservationId: String(
+              pago.reservationId ||
+                pago.reservaId ||
+                pago.reservation?.id ||
+                "",
+            ),
+            metodoPago:
+              pago.paymentMethod || pago.metodoPago || pago.method || "",
+            monto: Number(pago.amount ?? pago.monto ?? 0),
+            estado: normalizeStatus(
+              pago.statusName || pago.status || pago.estado,
+            ),
+            fecha:
+              pago.paymentDate ||
+              pago.createdAt ||
+              pago.created_at ||
+              pago.fechaPago,
+          }))
+        : [];
+
+      setReservas(reservasData);
+      setPagos(pagosData);
+    } catch (error: any) {
+      setErrorData("No se pudieron cargar los pagos");
+      setReservas([]);
+      setPagos([]);
+    } finally {
+      setLoadingData(false);
+    }
+  }, [user?.client?.id]);
+
+  useEffect(() => {
+    fetchPagosData();
+  }, [fetchPagosData]);
+
+  const reservationById = useMemo(
+    () => new Map(reservas.map((reserva) => [reserva.id, reserva])),
+    [reservas],
+  );
+
+  const reservasConPago = useMemo(
+    () =>
+      pagos.map((pago) => {
+        const reserva = reservationById.get(pago.reservationId);
+        return {
+          ...pago,
+          herramientaNombre:
+            reserva?.herramientaNombre || `Reserva #${pago.reservationId}`,
+          fechaInicio: reserva?.fechaInicio,
+          fechaFin: reserva?.fechaFin,
+          precioTotal: reserva?.precioTotal ?? pago.monto,
+        };
+      }),
+    [pagos, reservationById],
+  );
+
+  const pagosCompletados = useMemo(
+    () => pagos.filter((pago) => pago.estado === "PAID").length,
+    [pagos],
+  );
+
+  const totalGastado = useMemo(
+    () => pagos.reduce((sum, pago) => sum + pago.monto, 0),
+    [pagos],
+  );
+
+  const reservasPendientes = useMemo(() => {
+    const paidReservationIds = new Set(pagos.map((pago) => pago.reservationId));
+    return reservas.filter((reserva) => {
+      const status = normalizeStatus(reserva.estado);
+      const isPayable =
+        status !== "CANCELLED" && status !== "FINISHED" && status !== "PAID";
+      return isPayable && !paidReservationIds.has(reserva.id);
+    });
+  }, [pagos, reservas]);
+
+  const handlePago = async (metodoPago: string) => {
     if (!selectedReserva) return;
-    toast.success(`Pago procesado exitosamente con ${metodoPago}`);
-    setSelectedReserva(null);
+    setLoadingPago(true);
+    try {
+      await apiClient.post(`/payments/reservation/${selectedReserva.id}/pay`, {
+        paymentMethod: metodoPago,
+        amount: selectedReserva.precioTotal,
+      });
+      toast.success(`Pago procesado exitosamente con ${metodoPago}`);
+      setSelectedReserva(null);
+      fetchPagosData();
+    } catch (error: any) {
+      toast.error("Error al procesar el pago. Intenta nuevamente.");
+    } finally {
+      setLoadingPago(false);
+    }
+  };
+
+  const handlePagoPendiente = async () => {
+    const reservationId = Number(selectedPago?.reservationId);
+    if (!reservationId) {
+      toast.error("No se encontro la reserva para el pago");
+      return;
+    }
+    setLoadingPago(true);
+    try {
+      const detailsRes = await apiClient.get(
+        `/api/reservations/details/reservation/${reservationId}`,
+      );
+      if (!Array.isArray(detailsRes.data) || detailsRes.data.length === 0) {
+        toast.error("La reserva no tiene detalles para facturar");
+        return;
+      }
+      await apiClient.post(`/payments/reservation/${reservationId}/pay`, {});
+      toast.success("Pago procesado exitosamente");
+      setShowPagoDialog(false);
+      setSelectedPago(null);
+      fetchPagosData();
+    } catch (error: any) {
+      toast.error("Error al procesar el pago. Intenta nuevamente.");
+    } finally {
+      setLoadingPago(false);
+    }
+  };
+
+  const handleDownloadPdf = async (paymentId: string) => {
+    if (!paymentId) {
+      toast.error("No se encontro el id del pago");
+      return;
+    }
+    try {
+      const invoiceRes = await apiClient.get(`/invoices/payment/${paymentId}`);
+      const invoiceId = invoiceRes.data?.id;
+      if (!invoiceId) {
+        toast.error("No se encontro la factura");
+        return;
+      }
+      const pdfRes = await apiClient.get(`/invoices/${invoiceId}/pdf`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([pdfRes.data], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error: any) {
+      toast.error("No se pudo descargar la factura");
+    }
   };
 
   return (
@@ -29,7 +254,7 @@ export function ClientePagos() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">
@@ -38,7 +263,9 @@ export function ClientePagos() {
             <DollarSign className="w-4 h-4 text-gray-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalGastado.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              ${totalGastado.toLocaleString()}
+            </div>
             <p className="text-xs text-gray-500 mt-1">En total</p>
           </CardContent>
         </Card>
@@ -51,97 +278,13 @@ export function ClientePagos() {
             <CreditCard className="w-4 h-4 text-gray-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{reservasConPago.length}</div>
+            <div className="text-2xl font-bold">{pagosCompletados}</div>
             <p className="text-xs text-gray-500 mt-1">Transacciones exitosas</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Próximo Pago
-            </CardTitle>
-            <Calendar className="w-4 h-4 text-gray-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">-</div>
-            <p className="text-xs text-gray-500 mt-1">Sin pagos pendientes</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Payment Methods */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Métodos de Pago Guardados</CardTitle>
-          <CardDescription>Gestiona tus métodos de pago</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <CreditCard className="w-8 h-8 text-blue-600" />
-                <div>
-                  <p className="font-medium">Tarjeta de Crédito</p>
-                  <p className="text-sm text-gray-500">•••• •••• •••• 4242</p>
-                </div>
-              </div>
-              <Badge variant="default">Principal</Badge>
-            </div>
-
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center text-white font-bold">
-                  P
-                </div>
-                <div>
-                  <p className="font-medium">PayPal</p>
-                  <p className="text-sm text-gray-500">cliente@example.com</p>
-                </div>
-              </div>
-            </div>
-
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="w-full">
-                  + Agregar Método de Pago
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Agregar Método de Pago</DialogTitle>
-                  <DialogDescription>
-                    Ingresa los datos de tu tarjeta o cuenta
-                  </DialogDescription>
-                </DialogHeader>
-                <form className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cardNumber">Número de tarjeta</Label>
-                    <Input id="cardNumber" placeholder="1234 5678 9012 3456" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="expiry">Fecha de expiración</Label>
-                      <Input id="expiry" placeholder="MM/AA" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cvv">CVV</Label>
-                      <Input id="cvv" placeholder="123" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Nombre en la tarjeta</Label>
-                    <Input id="name" placeholder="Juan Pérez" />
-                  </div>
-                  <Button type="submit" className="w-full">
-                    Guardar Método
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </CardContent>
-      </Card>
+      {errorData && <div className="text-sm text-red-600">{errorData}</div>}
 
       {/* Payment History */}
       <Card>
@@ -150,42 +293,78 @@ export function ClientePagos() {
           <CardDescription>Todas tus transacciones</CardDescription>
         </CardHeader>
         <CardContent>
-          {reservasConPago.length > 0 ? (
+          {loadingData ? (
+            <div className="text-center py-12 text-gray-500">
+              Cargando pagos...
+            </div>
+          ) : reservasConPago.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Factura</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Herramienta</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Fecha</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Método</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Monto</th>
-                    <th className="text-left py-3 px-4 font-medium text-gray-600">Estado</th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">Acción</th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      Factura
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      Herramienta
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      Fecha
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      Monto
+                    </th>
+                    <th className="text-left py-3 px-4 font-medium text-gray-600">
+                      Estado
+                    </th>
+                    <th className="text-right py-3 px-4 font-medium text-gray-600">
+                      Acción
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {reservasConPago.map((reserva) => (
-                    <tr key={reserva.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4 text-gray-600">#{reserva.id.padStart(5, '0')}</td>
-                      <td className="py-3 px-4 font-medium">{reserva.herramientaNombre}</td>
+                  {reservasConPago.map((pago) => (
+                    <tr key={pago.id} className="border-b hover:bg-gray-50">
                       <td className="py-3 px-4 text-gray-600">
-                        {new Date(reserva.fechaInicio).toLocaleDateString('es-ES')}
+                        #
+                        {String(pago.reservationId || pago.id).padStart(5, "0")}
                       </td>
-                      <td className="py-3 px-4 text-gray-600">{reserva.metodoPago}</td>
-                      <td className="py-3 px-4 text-right font-medium">${reserva.precioTotal}</td>
+                      <td className="py-3 px-4 font-medium">
+                        {pago.herramientaNombre}
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">
+                        {formatDate(pago.fecha || pago.fechaInicio)}
+                      </td>
+                      <td className="py-3 px-4 text-left font-medium">
+                        ${pago.monto}
+                      </td>
                       <td className="py-3 px-4">
-                        <Badge variant="default">Completado</Badge>
+                        <Badge variant="default">
+                          {pago.estado || "Completado"}
+                        </Badge>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => toast.success('Factura descargada')}
-                        >
-                          <Download className="w-4 h-4 mr-1" />
-                          PDF
-                        </Button>
+                        {pago.estado === "PENDING" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedPago(pago);
+                              setShowPagoDialog(true);
+                            }}
+                          >
+                            Pagar
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDownloadPdf(pago.id)}
+                          >
+                            <Download className="w-4 h-4 mr-1" />
+                            PDF
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -202,7 +381,7 @@ export function ClientePagos() {
       </Card>
 
       {/* Make Payment Section */}
-      {misReservas.filter(r => !r.metodoPago && r.estado === 'pendiente').length > 0 && (
+      {reservasPendientes.length > 0 && (
         <Card className="border-orange-200">
           <CardHeader>
             <CardTitle className="flex items-center text-orange-900">
@@ -215,81 +394,126 @@ export function ClientePagos() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {misReservas
-                .filter(r => !r.metodoPago && r.estado === 'pendiente')
-                .map((reserva) => (
-                  <div key={reserva.id} className="flex items-center justify-between p-4 bg-orange-50 rounded-lg">
-                    <div>
-                      <p className="font-medium text-gray-900">{reserva.herramientaNombre}</p>
-                      <p className="text-sm text-gray-600">
-                        {new Date(reserva.fechaInicio).toLocaleDateString('es-ES')} - 
-                        {new Date(reserva.fechaFin).toLocaleDateString('es-ES')}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <p className="text-xl font-bold text-gray-900">${reserva.precioTotal}</p>
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button onClick={() => setSelectedReserva(reserva)}>
-                            Pagar Ahora
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>Realizar Pago</DialogTitle>
-                            <DialogDescription>
-                              Completa el pago para {reserva.herramientaNombre}
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4">
-                            <div className="bg-gray-50 p-4 rounded-lg">
-                              <div className="flex justify-between mb-2">
-                                <span className="text-gray-600">Herramienta:</span>
-                                <span className="font-medium">{reserva.herramientaNombre}</span>
-                              </div>
-                              <div className="flex justify-between mb-2">
-                                <span className="text-gray-600">Periodo:</span>
-                                <span className="font-medium">
-                                  {new Date(reserva.fechaInicio).toLocaleDateString('es-ES')} - 
-                                  {new Date(reserva.fechaFin).toLocaleDateString('es-ES')}
-                                </span>
-                              </div>
-                              <div className="flex justify-between pt-2 border-t">
-                                <span className="font-semibold">Total:</span>
-                                <span className="text-xl font-bold text-blue-600">${reserva.precioTotal}</span>
-                              </div>
+              {reservasPendientes.map((reserva) => (
+                <div
+                  key={reserva.id}
+                  className="flex items-center justify-between p-4 bg-orange-50 rounded-lg"
+                >
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {reserva.herramientaNombre}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {formatDate(reserva.fechaInicio)} -{" "}
+                      {formatDate(reserva.fechaFin)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="text-xl font-bold text-gray-900">
+                      ${reserva.precioTotal}
+                    </p>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button
+                          onClick={() => setSelectedReserva(reserva)}
+                          disabled={loadingPago}
+                        >
+                          Pagar Ahora
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Realizar Pago</DialogTitle>
+                          <DialogDescription>
+                            Completa el pago para {reserva.herramientaNombre}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <div className="flex justify-between mb-2">
+                              <span className="text-gray-600">
+                                Herramienta:
+                              </span>
+                              <span className="font-medium">
+                                {reserva.herramientaNombre}
+                              </span>
                             </div>
-
-                            <div className="space-y-2">
-                              <Label>Selecciona método de pago:</Label>
-                              <div className="space-y-2">
-                                <Button
-                                  variant="outline"
-                                  className="w-full justify-start"
-                                  onClick={() => handlePago('Tarjeta de Crédito')}
-                                >
-                                  <CreditCard className="w-4 h-4 mr-2" />
-                                  Tarjeta de Crédito (••• 4242)
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  className="w-full justify-start"
-                                  onClick={() => handlePago('PayPal')}
-                                >
-                                  PayPal
-                                </Button>
-                              </div>
+                            <div className="flex justify-between mb-2">
+                              <span className="text-gray-600">Periodo:</span>
+                              <span className="font-medium">
+                                {formatDate(reserva.fechaInicio)} -{" "}
+                                {formatDate(reserva.fechaFin)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between pt-2 border-t">
+                              <span className="font-semibold">Total:</span>
+                              <span className="text-xl font-bold text-blue-600">
+                                ${reserva.precioTotal}
+                              </span>
                             </div>
                           </div>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
+
+                          <div className="space-y-2">
+                            <Label>Selecciona método de pago:</Label>
+                            <div className="space-y-2">
+                              <Button
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={() => handlePago("Tarjeta de Crédito")}
+                                disabled={loadingPago}
+                              >
+                                <CreditCard className="w-4 h-4 mr-2" />
+                                Tarjeta de Crédito (••• 4242)
+                              </Button>
+                              <Button
+                                variant="outline"
+                                className="w-full justify-start"
+                                onClick={() => handlePago("PayPal")}
+                                disabled={loadingPago}
+                              >
+                                PayPal
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
-                ))}
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
       )}
+
+      <Dialog open={showPagoDialog} onOpenChange={setShowPagoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Pago</DialogTitle>
+            <DialogDescription>¿Deseas pagar este monto?</DialogDescription>
+          </DialogHeader>
+          <div className="text-2xl font-bold text-gray-900">
+            ${selectedPago?.monto ?? 0}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowPagoDialog(false)}
+              disabled={loadingPago}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handlePagoPendiente}
+              disabled={loadingPago}
+            >
+              {loadingPago ? "Procesando..." : "Aceptar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

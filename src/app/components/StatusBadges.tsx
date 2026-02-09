@@ -1,113 +1,202 @@
-import { Badge } from './ui/badge';
+import { Badge } from "./ui/badge";
 
-export type ToolStatus = 'AVAILABLE' | 'RENTED' | 'UNDER_REPAIR' | 'UNAVAILABLE';
-export type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'IN_PROGRESS' | 'FINISHED' | 'CANCELLED' | 'IN_INCIDENT';
+export type ToolStatus = "AVAILABLE" | "RENTED" | "UNDER_REPAIR" | "UNAVAILABLE";
+export type ReservationStatus =
+  | "PENDING"
+  | "CONFIRMED"
+  | "IN_PROGRESS"
+  | "FINISHED"
+  | "CANCELLED"
+  | "IN_INCIDENT";
 export type ReturnStatus =
-  | 'PENDING'
-  | 'SENT'
-  | 'RECEIVED'
-  | 'DAMAGED'
-  | 'CL_DAMAGED'
-  | 'CL_INCOMPLETE'
-  | 'SPP_INCOMPLETE';
+  | "PENDING"
+  | "SENT"
+  | "RECEIVED"
+  | "DAMAGED"
+  | "CL_DAMAGED"
+  | "CL_INCOMPLETE"
+  | "SPP_INCOMPLETE";
 
 // Badge para estados de herramientas
 export function ToolStatusBadge({ status }: { status: ToolStatus }) {
   const config = {
-    AVAILABLE: { label: 'Disponible', variant: 'default' as const, className: 'bg-[#7fb3b0] hover:bg-[#6da39f] text-white' },
-    RENTED: { label: 'Alquilada', variant: 'secondary' as const, className: 'bg-[#3d5a5a] hover:bg-[#2a4644] text-white' },
-    UNDER_REPAIR: { label: 'En Reparaci√≥n', variant: 'destructive' as const, className: 'bg-orange-500 hover:bg-orange-600' },
-    UNAVAILABLE: { label: 'No Disponible', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
+    AVAILABLE: {
+      label: "Disponible",
+      variant: "default" as const,
+      className: "bg-[#7fb3b0] hover:bg-[#6da39f] text-white",
+    },
+    RENTED: {
+      label: "Alquilada",
+      variant: "secondary" as const,
+      className: "bg-[#3d5a5a] hover:bg-[#2a4644] text-white",
+    },
+    UNDER_REPAIR: {
+      label: "En ReparaciÛn",
+      variant: "destructive" as const,
+      className: "bg-orange-500 hover:bg-orange-600",
+    },
+    UNAVAILABLE: {
+      label: "No Disponible",
+      variant: "destructive" as const,
+      className: "bg-red-600 hover:bg-red-700",
+    },
   };
 
   const { label, variant, className } = config[status] || {
     label: status,
-    variant: 'secondary' as const,
-    className: 'bg-gray-200 text-gray-800',
+    variant: "secondary" as const,
+    className: "bg-gray-200 text-gray-800",
   };
-  return <Badge variant={variant} className={className}>{label}</Badge>;
+
+  return (
+    <Badge variant={variant} className={className}>
+      {label}
+    </Badge>
+  );
 }
 
 // Badge para estados de reservas
-export function ReservationStatusBadge({ status }: { status: ReservationStatus }) {
+export function ReservationStatusBadge({
+  status,
+}: {
+  status: ReservationStatus;
+}) {
   const config = {
-    PENDING: { label: 'Pendiente', variant: 'secondary' as const, className: 'bg-yellow-500 hover:bg-yellow-600 text-white' },
-    CONFIRMED: { label: 'Confirmada', variant: 'default' as const, className: 'bg-[#3d5a5a] hover:bg-[#2a4644] text-white' },
-    IN_PROGRESS: { label: 'En Curso', variant: 'default' as const, className: 'bg-[#5a7876] hover:bg-[#4a6866] text-white' },
-    FINISHED: { label: 'Finalizada', variant: 'default' as const, className: 'bg-[#7fb3b0] hover:bg-[#6da39f] text-white' },
-    CANCELLED: { label: 'Cancelada', variant: 'destructive' as const },
-    IN_INCIDENT: { label: 'Con Incidente', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
+    PENDING: {
+      label: "Pendiente",
+      variant: "secondary" as const,
+      className: "bg-yellow-500 hover:bg-yellow-600 text-white",
+    },
+    CONFIRMED: {
+      label: "Confirmada",
+      variant: "default" as const,
+      className: "bg-[#3d5a5a] hover:bg-[#2a4644] text-white",
+    },
+    IN_PROGRESS: {
+      label: "En Curso",
+      variant: "default" as const,
+      className: "bg-[#5a7876] hover:bg-[#4a6866] text-white",
+    },
+    FINISHED: {
+      label: "Finalizada",
+      variant: "default" as const,
+      className: "bg-[#7fb3b0] hover:bg-[#6da39f] text-white",
+    },
+    CANCELLED: { label: "Cancelada", variant: "destructive" as const },
+    IN_INCIDENT: {
+      label: "Con Incidente",
+      variant: "destructive" as const,
+      className: "bg-red-600 hover:bg-red-700",
+    },
   };
 
   const { label, variant, className } = config[status] || {
-    label: status,
-    variant: 'secondary' as const,
-    className: 'bg-gray-200 text-gray-800',
+    label: "Desconocido",
+    variant: "secondary" as const,
+    className: "bg-gray-500 text-white",
   };
-  return <Badge variant={variant} className={className}>{label}</Badge>;
+
+  return (
+    <Badge variant={variant} className={className}>
+      {label}
+    </Badge>
+  );
 }
 
 // Badge para estados de devoluciones
 export function ReturnStatusBadge({ status }: { status: ReturnStatus }) {
   const config = {
-    PENDING: { label: 'Pendiente', variant: 'secondary' as const, className: 'bg-yellow-500 hover:bg-yellow-600 text-white' },
-    SENT: { label: 'Enviada', variant: 'default' as const, className: 'bg-[#3d5a5a] hover:bg-[#2a4644] text-white' },
-    RECEIVED: { label: 'Recibida', variant: 'default' as const, className: 'bg-[#7fb3b0] hover:bg-[#6da39f] text-white' },
-    DAMAGED: { label: 'Da√±ada', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
-    CL_DAMAGED: { label: 'Cliente reporta da√±o', variant: 'destructive' as const, className: 'bg-red-600 hover:bg-red-700' },
-    CL_INCOMPLETE: { label: 'Cliente reporta incompleto', variant: 'secondary' as const, className: 'bg-yellow-500 hover:bg-yellow-600 text-white' },
-    SPP_INCOMPLETE: { label: 'Proveedor confirma incompleto', variant: 'secondary' as const, className: 'bg-yellow-500 hover:bg-yellow-600 text-white' },
+    PENDING: {
+      label: "Pendiente",
+      variant: "secondary" as const,
+      className: "bg-yellow-500 hover:bg-yellow-600 text-white",
+    },
+    SENT: {
+      label: "Enviada",
+      variant: "default" as const,
+      className: "bg-[#3d5a5a] hover:bg-[#2a4644] text-white",
+    },
+    RECEIVED: {
+      label: "Recibida",
+      variant: "default" as const,
+      className: "bg-[#7fb3b0] hover:bg-[#6da39f] text-white",
+    },
+    DAMAGED: {
+      label: "DaÒada",
+      variant: "destructive" as const,
+      className: "bg-red-600 hover:bg-red-700",
+    },
+    CL_DAMAGED: {
+      label: "Cliente reporta daÒo",
+      variant: "destructive" as const,
+      className: "bg-red-600 hover:bg-red-700",
+    },
+    CL_INCOMPLETE: {
+      label: "Cliente reporta incompleto",
+      variant: "secondary" as const,
+      className: "bg-yellow-500 hover:bg-yellow-600 text-white",
+    },
+    SPP_INCOMPLETE: {
+      label: "Proveedor confirma incompleto",
+      variant: "secondary" as const,
+      className: "bg-yellow-500 hover:bg-yellow-600 text-white",
+    },
   };
 
   const { label, variant, className } = config[status] || {
     label: status,
-    variant: 'secondary' as const,
-    className: 'bg-gray-200 text-gray-800',
+    variant: "secondary" as const,
+    className: "bg-gray-200 text-gray-800",
   };
-  return <Badge variant={variant} className={className}>{label}</Badge>;
+
+  return (
+    <Badge variant={variant} className={className}>
+      {label}
+    </Badge>
+  );
 }
 
-// Mensajes de explicaci√≥n de estados de reserva
+// Mensajes de explicaciÛn de estados de reserva
 export function getReservationStatusMessage(status: ReservationStatus): string {
   const messages = {
-    PENDING: 'La reserva est√° esperando confirmaci√≥n del proveedor.',
-    CONFIRMED: 'La reserva ha sido confirmada y est√° lista para iniciar.',
-    IN_PROGRESS: 'La reserva est√° activa, las herramientas est√°n en uso.',
-    FINISHED: 'La reserva ha finalizado correctamente.',
-    CANCELLED: 'La reserva fue cancelada.',
-    IN_INCIDENT: 'La reserva tiene un incidente reportado (da√±o en devoluci√≥n).',
+    PENDING: "La reserva est· esperando confirmaciÛn del proveedor.",
+    CONFIRMED: "La reserva ha sido confirmada y est· lista para iniciar.",
+    IN_PROGRESS: "La reserva est· activa, las herramientas est·n en uso.",
+    FINISHED: "La reserva ha finalizado correctamente.",
+    CANCELLED: "La reserva fue cancelada.",
+    IN_INCIDENT: "La reserva tiene un incidente reportado (daÒo en devoluciÛn).",
   };
   return messages[status];
 }
 
-// Mensajes de explicaci√≥n de estados de devoluci√≥n
+// Mensajes de explicaciÛn de estados de devoluciÛn
 export function getReturnStatusMessage(status: ReturnStatus): string {
   const messages = {
-    PENDING: 'Devoluci√≥n pendiente.',
-    SENT: 'El cliente confirm√≥ el env√≠o. Esperando recepci√≥n del proveedor.',
-    RECEIVED: 'Recibido correctamente. La reserva pasa a FINISHED.',
-    DAMAGED: 'Da√±os confirmados. La reserva pasa a IN_INCIDENT.',
-    CL_DAMAGED: 'Cliente reporta da√±o antes de env√≠o.',
-    CL_INCOMPLETE: 'Cliente reporta devoluci√≥n incompleta.',
-    SPP_INCOMPLETE: 'Proveedor confirma devoluci√≥n incompleta. La reserva pasa a IN_INCIDENT.',
+    PENDING: "DevoluciÛn pendiente.",
+    SENT: "El cliente confirmÛ el envÌo. Esperando recepciÛn del proveedor.",
+    RECEIVED: "Recibido correctamente.",
+    DAMAGED: "DaÒos confirmados.",
+    CL_DAMAGED: "Cliente reporta daÒo antes de envÌo.",
+    CL_INCOMPLETE: "Cliente reporta devoluciÛn incompleta.",
+    SPP_INCOMPLETE: "Proveedor confirma devoluciÛn incompleta.",
   };
   return messages[status];
 }
 
 // Verificar si una reserva permite modificaciones
 export function canModifyReservation(status: ReservationStatus): boolean {
-  return status !== 'CANCELLED' && status !== 'FINISHED' && status !== 'IN_INCIDENT';
+  return status !== "CANCELLED" && status !== "FINISHED" && status !== "IN_INCIDENT";
 }
 
-// Mensaje de por qu√© no se puede modificar
+// Mensaje de por quÈ no se puede modificar
 export function getModificationBlockedMessage(status: ReservationStatus): string {
   const messages = {
-    CANCELLED: 'No puedes modificar esta reserva porque est√° cancelada.',
-    FINISHED: 'No puedes modificar esta reserva porque ya ha finalizado.',
-    IN_INCIDENT: 'No puedes modificar esta reserva porque tiene un incidente activo.',
-    PENDING: '',
-    CONFIRMED: '',
-    IN_PROGRESS: '',
+    CANCELLED: "No puedes modificar esta reserva porque est· cancelada.",
+    FINISHED: "No puedes modificar esta reserva porque ya ha finalizado.",
+    IN_INCIDENT: "No puedes modificar esta reserva porque tiene un incidente activo.",
+    PENDING: "",
+    CONFIRMED: "",
+    IN_PROGRESS: "",
   };
   return messages[status];
 }

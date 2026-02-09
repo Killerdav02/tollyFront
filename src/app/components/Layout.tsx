@@ -1,24 +1,25 @@
-import React from 'react';
-import { Outlet, Link, useNavigate } from 'react-router';
-import { useAuth } from '../../auth/useAuth';
-import { Button } from '@/app/components/ui/button';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Wrench, 
-  CreditCard, 
-  FileText, 
-  Package, 
+import React from "react";
+import { Outlet, Link, useNavigate } from "react-router";
+import { useAuth } from "../../auth/useAuth";
+import { Button } from "@/app/components/ui/button";
+import {
+  LayoutDashboard,
+  Users,
+  Wrench,
+  CreditCard,
+  FileText,
+  Package,
   Calendar,
   Search,
   LogOut,
   Menu,
-  X
-} from 'lucide-react';
-import { useState } from 'react';
+  X,
+} from "lucide-react";
+import { useState } from "react";
+import { CartSidebar } from "./CartSidebar";
 
 interface LayoutProps {
-  role: 'admin' | 'proveedor' | 'cliente';
+  role: "admin" | "proveedor" | "cliente";
 }
 
 export function Layout({ role }: LayoutProps) {
@@ -28,32 +29,36 @@ export function Layout({ role }: LayoutProps) {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate("/");
   };
 
   const getNavLinks = () => {
     switch (role) {
-      case 'admin':
+      case "admin":
         return [
-          { to: '/admin', icon: LayoutDashboard, label: 'Panel' },
-          { to: '/admin/usuarios', icon: Users, label: 'Usuarios' },
-          { to: '/admin/herramientas', icon: Wrench, label: 'Herramientas' },
-          { to: '/admin/pagos', icon: CreditCard, label: 'Pagos' },
-          { to: '/admin/reportes', icon: FileText, label: 'Reportes' },
+          { to: "/admin", icon: LayoutDashboard, label: "Panel" },
+          { to: "/admin/usuarios", icon: Users, label: "Usuarios" },
+          { to: "/admin/herramientas", icon: Wrench, label: "Herramientas" },
+          { to: "/admin/pagos", icon: CreditCard, label: "Pagos" },
+          { to: "/admin/reportes", icon: FileText, label: "Reportes" },
         ];
-      case 'proveedor':
+      case "proveedor":
         return [
-          { to: '/proveedor', icon: LayoutDashboard, label: 'Panel' },
-          { to: '/proveedor/inventario', icon: Package, label: 'Inventario' },
-          { to: '/proveedor/reservas', icon: Calendar, label: 'Reservas' },
-          { to: '/proveedor/facturacion', icon: CreditCard, label: 'Facturación' },
+          { to: "/proveedor", icon: LayoutDashboard, label: "Panel" },
+          { to: "/proveedor/inventario", icon: Package, label: "Inventario" },
+          { to: "/proveedor/reservas", icon: Calendar, label: "Reservas" },
+          {
+            to: "/proveedor/facturacion",
+            icon: CreditCard,
+            label: "Facturación",
+          },
         ];
-      case 'cliente':
+      case "cliente":
         return [
-          { to: '/cliente', icon: LayoutDashboard, label: 'Inicio' },
-          { to: '/cliente/explorar', icon: Search, label: 'Explorar' },
-          { to: '/cliente/reservas', icon: Calendar, label: 'Mis Reservas' },
-          { to: '/cliente/pagos', icon: CreditCard, label: 'Pagos' },
+          { to: "/cliente", icon: LayoutDashboard, label: "Inicio" },
+          { to: "/cliente/explorar", icon: Search, label: "Explorar" },
+          { to: "/cliente/reservas", icon: Calendar, label: "Mis Reservas" },
+          { to: "/cliente/pagos", icon: CreditCard, label: "Pagos" },
         ];
     }
   };
@@ -87,10 +92,11 @@ export function Layout({ role }: LayoutProps) {
               ))}
             </nav>
 
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 md:space-x-4">
               <div className="hidden md:block text-sm text-[#a3ccc9]">
                 {user?.nombre}
               </div>
+              {role === "cliente" && <CartSidebar isFloating={false} />}
               <Button
                 variant="outline"
                 size="sm"
