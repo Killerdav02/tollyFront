@@ -18,3 +18,12 @@ export async function listReservationsBySupplier(params: {
   return response.data;
 }
 
+export async function finishReservation(reservationId: number): Promise<Reservation> {
+  const response = await apiClient.put<Reservation>(`/api/reservations/${reservationId}/finish`);
+  return response.data;
+}
+
+export async function incidentReservation(reservationId: number): Promise<Reservation> {
+  const response = await apiClient.put<Reservation>(`/api/reservations/${reservationId}/incident`);
+  return response.data;
+}

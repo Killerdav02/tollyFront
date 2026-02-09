@@ -1,4 +1,4 @@
-import { Badge } from "./ui/badge";
+Ôªøimport { Badge } from "./ui/badge";
 
 export type ToolStatus = "AVAILABLE" | "RENTED" | "UNDER_REPAIR" | "UNAVAILABLE";
 export type ReservationStatus =
@@ -19,33 +19,34 @@ export type ReturnStatus =
 
 // Badge para estados de herramientas
 export function ToolStatusBadge({ status }: { status: ToolStatus }) {
+  const baseClass = "rounded-full px-3 py-1 text-xs font-medium";
   const config = {
     AVAILABLE: {
       label: "Disponible",
       variant: "default" as const,
-      className: "bg-[#7fb3b0] hover:bg-[#6da39f] text-white",
+      className: `${baseClass} bg-[#7fb3b0]/25 text-[#2a4644]`,
     },
     RENTED: {
       label: "Alquilada",
       variant: "secondary" as const,
-      className: "bg-[#3d5a5a] hover:bg-[#2a4644] text-white",
+      className: `${baseClass} bg-[#3d5a5a]/20 text-[#2a4644]`,
     },
     UNDER_REPAIR: {
-      label: "En ReparaciÛn",
+      label: "En Reparaci√≥n",
       variant: "destructive" as const,
-      className: "bg-orange-500 hover:bg-orange-600",
+      className: `${baseClass} bg-orange-100 text-orange-700`,
     },
     UNAVAILABLE: {
       label: "No Disponible",
       variant: "destructive" as const,
-      className: "bg-red-600 hover:bg-red-700",
+      className: `${baseClass} bg-red-100 text-red-700`,
     },
   };
 
   const { label, variant, className } = config[status] || {
     label: status,
     variant: "secondary" as const,
-    className: "bg-gray-200 text-gray-800",
+    className: `${baseClass} bg-gray-100 text-gray-700`,
   };
 
   return (
@@ -61,39 +62,44 @@ export function ReservationStatusBadge({
 }: {
   status: ReservationStatus;
 }) {
+  const baseClass = "rounded-full px-3 py-1 text-xs font-medium";
   const config = {
     PENDING: {
       label: "Pendiente",
       variant: "secondary" as const,
-      className: "bg-yellow-500 hover:bg-yellow-600 text-white",
+      className: `${baseClass} bg-yellow-100 text-yellow-700`,
     },
     CONFIRMED: {
       label: "Confirmada",
       variant: "default" as const,
-      className: "bg-[#3d5a5a] hover:bg-[#2a4644] text-white",
+      className: `${baseClass} bg-[#3d5a5a]/20 text-[#2a4644]`,
     },
     IN_PROGRESS: {
       label: "En Curso",
       variant: "default" as const,
-      className: "bg-[#5a7876] hover:bg-[#4a6866] text-white",
+      className: `${baseClass} bg-[#5a7876]/20 text-[#2a4644]`,
     },
     FINISHED: {
       label: "Finalizada",
       variant: "default" as const,
-      className: "bg-[#7fb3b0] hover:bg-[#6da39f] text-white",
+      className: `${baseClass} bg-[#7fb3b0]/25 text-[#2a4644]`,
     },
-    CANCELLED: { label: "Cancelada", variant: "destructive" as const },
+    CANCELLED: {
+      label: "Cancelada",
+      variant: "destructive" as const,
+      className: `${baseClass} bg-gray-100 text-gray-700`,
+    },
     IN_INCIDENT: {
       label: "Con Incidente",
       variant: "destructive" as const,
-      className: "bg-red-600 hover:bg-red-700",
+      className: `${baseClass} bg-red-100 text-red-700`,
     },
   };
 
   const { label, variant, className } = config[status] || {
     label: "Desconocido",
     variant: "secondary" as const,
-    className: "bg-gray-500 text-white",
+    className: `${baseClass} bg-gray-100 text-gray-700`,
   };
 
   return (
@@ -105,48 +111,49 @@ export function ReservationStatusBadge({
 
 // Badge para estados de devoluciones
 export function ReturnStatusBadge({ status }: { status: ReturnStatus }) {
+  const baseClass = "rounded-full px-3 py-1 text-xs font-medium";
   const config = {
     PENDING: {
       label: "Pendiente",
       variant: "secondary" as const,
-      className: "bg-yellow-500 hover:bg-yellow-600 text-white",
+      className: `${baseClass} bg-yellow-100 text-yellow-700`,
     },
     SENT: {
       label: "Enviada",
       variant: "default" as const,
-      className: "bg-[#3d5a5a] hover:bg-[#2a4644] text-white",
+      className: `${baseClass} bg-[#3d5a5a]/20 text-[#2a4644]`,
     },
     RECEIVED: {
       label: "Recibida",
       variant: "default" as const,
-      className: "bg-[#7fb3b0] hover:bg-[#6da39f] text-white",
+      className: `${baseClass} bg-[#7fb3b0]/25 text-[#2a4644]`,
     },
     DAMAGED: {
-      label: "DaÒada",
+      label: "Da√±ada",
       variant: "destructive" as const,
-      className: "bg-red-600 hover:bg-red-700",
+      className: `${baseClass} bg-red-100 text-red-700`,
     },
     CL_DAMAGED: {
-      label: "Cliente reporta daÒo",
+      label: "Cliente reporta da√±o",
       variant: "destructive" as const,
-      className: "bg-red-600 hover:bg-red-700",
+      className: `${baseClass} bg-red-100 text-red-700`,
     },
     CL_INCOMPLETE: {
       label: "Cliente reporta incompleto",
       variant: "secondary" as const,
-      className: "bg-yellow-500 hover:bg-yellow-600 text-white",
+      className: `${baseClass} bg-yellow-100 text-yellow-700`,
     },
     SPP_INCOMPLETE: {
       label: "Proveedor confirma incompleto",
       variant: "secondary" as const,
-      className: "bg-yellow-500 hover:bg-yellow-600 text-white",
+      className: `${baseClass} bg-yellow-100 text-yellow-700`,
     },
   };
 
   const { label, variant, className } = config[status] || {
     label: status,
     variant: "secondary" as const,
-    className: "bg-gray-200 text-gray-800",
+    className: `${baseClass} bg-gray-100 text-gray-700`,
   };
 
   return (
@@ -156,29 +163,29 @@ export function ReturnStatusBadge({ status }: { status: ReturnStatus }) {
   );
 }
 
-// Mensajes de explicaciÛn de estados de reserva
+// Mensajes de explicaci√≥n de estados de reserva
 export function getReservationStatusMessage(status: ReservationStatus): string {
   const messages = {
-    PENDING: "La reserva est· esperando confirmaciÛn del proveedor.",
-    CONFIRMED: "La reserva ha sido confirmada y est· lista para iniciar.",
-    IN_PROGRESS: "La reserva est· activa, las herramientas est·n en uso.",
+    PENDING: "La reserva est√° esperando confirmaci√≥n del proveedor.",
+    CONFIRMED: "La reserva ha sido confirmada y est√° lista para iniciar.",
+    IN_PROGRESS: "La reserva est√° activa, las herramientas est√°n en uso.",
     FINISHED: "La reserva ha finalizado correctamente.",
     CANCELLED: "La reserva fue cancelada.",
-    IN_INCIDENT: "La reserva tiene un incidente reportado (daÒo en devoluciÛn).",
+    IN_INCIDENT: "La reserva tiene un incidente reportado (da√±o en devoluci√≥n).",
   };
   return messages[status];
 }
 
-// Mensajes de explicaciÛn de estados de devoluciÛn
+// Mensajes de explicaci√≥n de estados de devoluci√≥n
 export function getReturnStatusMessage(status: ReturnStatus): string {
   const messages = {
-    PENDING: "DevoluciÛn pendiente.",
-    SENT: "El cliente confirmÛ el envÌo. Esperando recepciÛn del proveedor.",
+    PENDING: "Devoluci√≥n pendiente.",
+    SENT: "El cliente confirm√≥ el env√≠o. Esperando recepci√≥n del proveedor.",
     RECEIVED: "Recibido correctamente.",
-    DAMAGED: "DaÒos confirmados.",
-    CL_DAMAGED: "Cliente reporta daÒo antes de envÌo.",
-    CL_INCOMPLETE: "Cliente reporta devoluciÛn incompleta.",
-    SPP_INCOMPLETE: "Proveedor confirma devoluciÛn incompleta.",
+    DAMAGED: "Da√±os confirmados.",
+    CL_DAMAGED: "Cliente reporta da√±o antes de env√≠o.",
+    CL_INCOMPLETE: "Cliente reporta devoluci√≥n incompleta.",
+    SPP_INCOMPLETE: "Proveedor confirma devoluci√≥n incompleta.",
   };
   return messages[status];
 }
@@ -188,10 +195,10 @@ export function canModifyReservation(status: ReservationStatus): boolean {
   return status !== "CANCELLED" && status !== "FINISHED" && status !== "IN_INCIDENT";
 }
 
-// Mensaje de por quÈ no se puede modificar
+// Mensaje de por qu√© no se puede modificar
 export function getModificationBlockedMessage(status: ReservationStatus): string {
   const messages = {
-    CANCELLED: "No puedes modificar esta reserva porque est· cancelada.",
+    CANCELLED: "No puedes modificar esta reserva porque est√° cancelada.",
     FINISHED: "No puedes modificar esta reserva porque ya ha finalizado.",
     IN_INCIDENT: "No puedes modificar esta reserva porque tiene un incidente activo.",
     PENDING: "",
@@ -200,3 +207,4 @@ export function getModificationBlockedMessage(status: ReservationStatus): string
   };
   return messages[status];
 }
+

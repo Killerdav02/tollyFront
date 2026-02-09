@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+锘縤mport React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Textarea } from '@/app/components/ui/textarea';
@@ -7,10 +7,10 @@ import { Label } from '@/app/components/ui/label';
 import { Alert, AlertDescription } from '@/app/components/ui/alert';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { ReservationStatusBadge, ReturnStatusBadge } from '@/app/components/StatusBadges';
-import { AlertTriangle, Eye } from 'lucide-react';
+import { AlertTriangle, Eye, CheckCircle2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { listReturns, receiveReturn, getReturnById } from '../../../services/returnService';
-import { listReservationsBySupplier } from '../../../services/reservationService';
+import { listReservationsBySupplier, finishReservation, incidentReservation } from '../../../services/reservationService';
 import { listTools } from '../../../services/toolService';
 import type { ReturnResponse, Reservation, PageResponse } from '../../../services/types';
 
@@ -20,15 +20,15 @@ const returnStatusLabels: Record<string, string> = {
   PENDING: 'Pendiente',
   SENT: 'Enviada',
   RECEIVED: 'Recibida',
-  DAMAGED: 'Da馻da',
-  CL_DAMAGED: 'Cliente reporta da駉',
+  DAMAGED: 'Da帽ada',
+  CL_DAMAGED: 'Cliente reporta da帽o',
   CL_INCOMPLETE: 'Cliente reporta incompleto',
   SPP_INCOMPLETE: 'Proveedor confirma incompleto',
 };
 
 const proveedorAcciones = [
   { code: 'RECEIVED', label: 'Recibir sin novedades' },
-  { code: 'DAMAGED', label: 'Recibir con da駉' },
+  { code: 'DAMAGED', label: 'Recibir con da帽o' },
   { code: 'SPP_INCOMPLETE', label: 'Recibir incompleto' },
 ];
 
@@ -37,7 +37,7 @@ function normalizeReturnStatus(status?: string): 'PENDING' | 'SENT' | 'RECEIVED'
   if (['CL_DAMAGED', 'CL_INCOMPLETE', 'SPP_INCOMPLETE'].includes(normalized)) return normalized as any;
   if (['SENT', 'ENVIADA', 'ENVIADO'].includes(normalized)) return 'SENT';
   if (['RECEIVED', 'RECIBIDA', 'RECIBIDO'].includes(normalized)) return 'RECEIVED';
-  if (['DAMAGED', 'DANADA', 'DA袮DA'].includes(normalized)) return 'DAMAGED';
+  if (['DAMAGED', 'DANADA', 'DA脩ADA'].includes(normalized)) return 'DAMAGED';
   return 'PENDING';
 }
 
@@ -158,7 +158,7 @@ export function ProveedorReservas() {
   const handleReceive = async () => {
     if (!selectedReturn) return;
     if (!selectedAction) {
-      toast.error('Selecciona el estado final de la devoluci髇.');
+      toast.error('Selecciona el estado final de la devoluci贸n.');
       return;
     }
     try {
@@ -166,7 +166,7 @@ export function ProveedorReservas() {
         returnStatusName: selectedAction,
         observations: observations || undefined,
       });
-      toast.success(returnStatusLabels[selectedAction] || 'Acci髇 registrada.');
+      toast.success(returnStatusLabels[selectedAction] || 'Acci贸n registrada.');
       setSelectedReturn(null);
       setDetailReturn(null);
       setObservations('');
@@ -174,7 +174,32 @@ export function ProveedorReservas() {
       const updated = await listReturns();
       setReturns(updated);
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'No se pudo actualizar la devoluci髇.');
+      toast.error(err?.response?.data?.message || 'No se pudo actualizar la devoluci贸n.');
+    }
+  };
+
+  const canFinalize = (statusName: string) => {
+    const normalized = normalizeReservationStatus(statusName);
+    return normalized === 'IN_PROGRESS' || normalized === 'IN_INCIDENT';
+  };
+
+  const handleFinish = async (reservationId: number) => {
+    try {
+      const updated = await finishReservation(reservationId);
+      toast.success('Reserva finalizada.');
+      setReservations((prev) => prev.map((r) => (r.id === reservationId ? updated : r)));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'No se pudo finalizar la reserva.');
+    }
+  };
+
+  const handleIncident = async (reservationId: number) => {
+    try {
+      const updated = await incidentReservation(reservationId);
+      toast.success('Reserva marcada en incidencia.');
+      setReservations((prev) => prev.map((r) => (r.id === reservationId ? updated : r)));
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || 'No se pudo marcar la incidencia.');
     }
   };
 
@@ -244,6 +269,7 @@ export function ProveedorReservas() {
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Periodo</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Total</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-600">Estado</th>
+                  <th className="text-right py-3 px-4 font-medium text-gray-600">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -258,6 +284,29 @@ export function ProveedorReservas() {
                     <td className="py-3 px-4">
                       <ReservationStatusBadge status={normalizeReservationStatus(reserva.statusName)} />
                     </td>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleFinish(reserva.id)}
+                          disabled={!canFinalize(reserva.statusName)}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-1" />
+                          Finalizar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleIncident(reserva.id)}
+                          disabled={!canFinalize(reserva.statusName)}
+                          className="border-red-600 text-red-600 hover:bg-red-50"
+                        >
+                          <AlertCircle className="w-4 h-4 mr-1" />
+                          Incidencia
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -269,7 +318,7 @@ export function ProveedorReservas() {
           {reservationPage && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-gray-500">
-                P醙ina {reservationPage.number + 1} de {reservationPage.totalPages}
+                P谩gina {reservationPage.number + 1} de {reservationPage.totalPages}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -291,6 +340,9 @@ export function ProveedorReservas() {
               </div>
             </div>
           )}
+          <p className="text-xs text-gray-500 mt-2">
+            Para finalizar o marcar incidencia, la reserva debe estar en IN_PROGRESS o IN_INCIDENT y el pago debe estar en PAID.
+          </p>
         </CardContent>
       </Card>
 
@@ -323,57 +375,58 @@ export function ProveedorReservas() {
         </Card>
       </div>
 
-      {pendingReturns.length > 0 && (
-        <Card className="border-blue-200">
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <AlertTriangle className="w-5 h-5 mr-2 text-blue-600" />
-              Devoluciones por Recibir
-            </CardTitle>
-            <CardDescription>
-              El proveedor solo puede recibir devoluciones en estado SENT o reportadas por el cliente.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Alert className="mb-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Si la devoluci髇 es parcial la reserva sigue IN_PROGRESS. Si es total: RECEIVED ? FINISHED, DAMAGED o SPP_INCOMPLETE ? IN_INCIDENT.
-              </AlertDescription>
-            </Alert>
-            <div className="space-y-4">
-              {pendingReturns.map((ret) => (
-                <div
-                  key={ret.id}
-                  className="flex flex-col gap-4 p-4 bg-blue-50 rounded-lg border border-blue-100"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-gray-900">Devoluci髇 #{ret.id}</h3>
-                        <ReturnStatusBadge status={normalizeReturnStatus(ret.returnStatusName)} />
-                      </div>
-                      <p className="text-sm text-gray-600 mb-1">Reserva: #{ret.reservationId}</p>
-                      <p className="text-sm text-gray-500">Estado: {returnStatusLabels[normalizeReturnStatus(ret.returnStatusName)]}</p>
-                      <p className="text-sm text-gray-500">Observaciones: {ret.observations || 'Sin observaciones'}</p>
+      <Card className="border-blue-200">
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <AlertTriangle className="w-5 h-5 mr-2 text-blue-600" />
+            Devoluciones por Recibir
+          </CardTitle>
+          <CardDescription>
+            El proveedor solo puede recibir devoluciones en estado SENT o reportadas por el cliente.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Alert className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Si la devoluci贸n es parcial la reserva sigue IN_PROGRESS. Si es total: RECEIVED ? FINISHED, DAMAGED o SPP_INCOMPLETE ? IN_INCIDENT.
+            </AlertDescription>
+          </Alert>
+          <div className="space-y-4">
+            {pendingReturns.length === 0 && (
+              <p className="text-sm text-gray-500">No hay devoluciones pendientes.</p>
+            )}
+            {pendingReturns.map((ret) => (
+              <div
+                key={ret.id}
+                className="flex flex-col gap-4 p-4 bg-blue-50 rounded-lg border border-blue-100"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold text-gray-900">Devoluci贸n #{ret.id}</h3>
+                      <ReturnStatusBadge status={normalizeReturnStatus(ret.returnStatusName)} />
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => openManageReturn(ret)}
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        Gestionar
-                      </Button>
-                    </div>
+                    <p className="text-sm text-gray-600 mb-1">Reserva: #{ret.reservationId}</p>
+                    <p className="text-sm text-gray-500">Estado: {returnStatusLabels[normalizeReturnStatus(ret.returnStatusName)]}</p>
+                    <p className="text-sm text-gray-500">Observaciones: {ret.observations || 'Sin observaciones'}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openManageReturn(ret)}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      Gestionar
+                    </Button>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -414,7 +467,7 @@ export function ProveedorReservas() {
       <Dialog open={Boolean(selectedReturn)} onOpenChange={(open) => !open && setSelectedReturn(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Recibir devoluci髇 #{selectedReturn?.id}</DialogTitle>
+            <DialogTitle>Recibir devoluci贸n #{selectedReturn?.id}</DialogTitle>
             <DialogDescription>
               Selecciona el estado final y registra observaciones generales.
             </DialogDescription>
@@ -486,3 +539,4 @@ export function ProveedorReservas() {
     </div>
   );
 }
+

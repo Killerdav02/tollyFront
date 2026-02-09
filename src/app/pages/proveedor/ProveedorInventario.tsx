@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
@@ -39,6 +39,18 @@ function resolveSupplierId(tools: Tool[]): number | null {
   return null;
 }
 
+function resolveImageUrl(url?: string) {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+  const base = import.meta.env.VITE_API_URL || "";
+  if (url.startsWith("/")) {
+    return base ? `${base.replace(/\/$/, "")}${url}` : url;
+  }
+  return base ? `${base.replace(/\/$/, "")}/${url.replace(/^\//, "")}` : `/${url}`;
+}
+
 export function ProveedorInventario() {
   const [tools, setTools] = useState<Tool[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -52,8 +64,6 @@ export function ProveedorInventario() {
   const [filters, setFilters] = useState({
     categoryId: 'all',
     statusName: 'all',
-    minPrice: '',
-    maxPrice: '',
     onlyMine: true,
   });
 
@@ -98,7 +108,8 @@ export function ProveedorInventario() {
           try {
             const images = await listToolImages(tool.id);
             const firstImage: any = images[0];
-            const url = firstImage?.image_url || firstImage?.imageUrl;
+            const rawUrl = firstImage?.image_url || firstImage?.imageUrl || firstImage?.url;
+            const url = resolveImageUrl(rawUrl);
             return [tool.id, url] as const;
           } catch {
             return [tool.id, undefined] as const;
@@ -146,14 +157,6 @@ export function ProveedorInventario() {
         const statusName = statusNameById[tool.statusId];
         return normalizeToolStatus(statusName) === filters.statusName;
       });
-    }
-
-    if (filters.minPrice) {
-      filtered = filtered.filter((tool) => tool.dailyPrice >= Number(filters.minPrice));
-    }
-
-    if (filters.maxPrice) {
-      filtered = filtered.filter((tool) => tool.dailyPrice <= Number(filters.maxPrice));
     }
 
     return filtered;
@@ -257,7 +260,8 @@ export function ProveedorInventario() {
               toolId: created.id,
               image_url: formData.imageUrl.trim(),
             });
-            setImagesByTool((prev) => ({ ...prev, [created.id]: image.image_url }));
+            const rawUrl = image.image_url || (image as any).imageUrl || (image as any).url;
+            setImagesByTool((prev) => ({ ...prev, [created.id]: resolveImageUrl(rawUrl) }));
           } catch {
             toast.error('La herramienta se creó, pero la imagen no pudo guardarse.');
           }
@@ -314,36 +318,42 @@ export function ProveedorInventario() {
             <Filter className="w-4 h-4" />
             Filtros
           </CardTitle>
-          <CardDescription>Aplica filtros por categoría, precio o disponibilidad.</CardDescription>
+          <CardDescription>Aplica filtros por categoría y disponibilidad.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="md:col-span-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
               <Label className="text-sm">Categoría</Label>
               <Select
                 value={filters.categoryId}
                 onValueChange={(value) => setFilters((prev) => ({ ...prev, categoryId: value }))}
               >
-                <SelectTrigger>
+                <SelectTrigger className="focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]" style={{ backgroundColor: "white", borderColor: "#2a4644" }}>
                   <SelectValue placeholder="Todas" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
+                <SelectContent className="bg-white border-[#2a4644]">
+                  <SelectItem className="focus:bg-gray-100 focus:text-gray-900" value="all">
+                    Todas
+                  </SelectItem>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={String(category.id)}>
+                    <SelectItem
+                      key={category.id}
+                      value={String(category.id)}
+                      className="focus:bg-gray-100 focus:text-gray-900"
+                    >
                       {category.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="space-y-2">
               <Label className="text-sm">Estado</Label>
               <Select
                 value={filters.statusName}
                 onValueChange={(value) => setFilters((prev) => ({ ...prev, statusName: value }))}
               >
-                <SelectTrigger>
+                <SelectTrigger className="focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]" style={{ backgroundColor: "white", borderColor: "#2a4644" }}>
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -354,32 +364,6 @@ export function ProveedorInventario() {
                   <SelectItem value="RENTED">Alquilada</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label className="text-sm">Precio mínimo</Label>
-              <Input
-                type="number"
-                min="0"
-                value={filters.minPrice}
-                onChange={(e) => setFilters((prev) => ({ ...prev, minPrice: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label className="text-sm">Precio máximo</Label>
-              <Input
-                type="number"
-                min="0"
-                value={filters.maxPrice}
-                onChange={(e) => setFilters((prev) => ({ ...prev, maxPrice: e.target.value }))}
-              />
-            </div>
-            <div className="flex items-end gap-2">
-              <Checkbox
-                id="onlyMine"
-                checked={filters.onlyMine}
-                onCheckedChange={(checked) => setFilters((prev) => ({ ...prev, onlyMine: Boolean(checked) }))}
-              />
-              <Label htmlFor="onlyMine" className="text-sm">Solo mis herramientas</Label>
             </div>
           </div>
         </CardContent>
@@ -416,7 +400,7 @@ export function ProveedorInventario() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-gray-600">En Reparación</CardTitle>
+            <CardTitle className="text-sm text-gray-600">En ReparaciÃ³n</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
@@ -525,6 +509,7 @@ export function ProveedorInventario() {
                 <Input
                   value={formData.name}
                   onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                  className="!bg-white !border-[#2a4644] focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]"
                   required
                 />
               </div>
@@ -534,12 +519,16 @@ export function ProveedorInventario() {
                   value={formData.categoryId}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, categoryId: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]" style={{ backgroundColor: "white", borderColor: "#2a4644" }}>
                     <SelectValue placeholder="Selecciona una categoría" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-white border-[#2a4644]">
                     {categories.map((category) => (
-                      <SelectItem key={category.id} value={String(category.id)}>
+                      <SelectItem
+                        key={category.id}
+                        value={String(category.id)}
+                        className="focus:bg-gray-100 focus:text-gray-900"
+                      >
                         {category.name}
                       </SelectItem>
                     ))}
@@ -553,11 +542,12 @@ export function ProveedorInventario() {
               <Textarea
                 value={formData.description}
                 onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                className="!bg-white !border-[#2a4644] focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]"
                 required
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className={"grid grid-cols-1 gap-4 " + (editingTool ? "md:grid-cols-3" : "md:grid-cols-2")}>
               <div className="space-y-2">
                 <Label>Precio diario</Label>
                 <Input
@@ -565,6 +555,7 @@ export function ProveedorInventario() {
                   min="0"
                   value={formData.dailyPrice}
                   onChange={(e) => setFormData((prev) => ({ ...prev, dailyPrice: e.target.value }))}
+                  className="!bg-white !border-[#2a4644] focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]"
                   required
                 />
               </div>
@@ -582,6 +573,7 @@ export function ProveedorInventario() {
                       availableQuantity: editingTool ? prev.availableQuantity : value,
                     }));
                   }}
+                  className="!bg-white !border-[#2a4644] focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]"
                   required
                 />
               </div>
@@ -593,6 +585,7 @@ export function ProveedorInventario() {
                     min="0"
                     value={formData.availableQuantity}
                     onChange={(e) => setFormData((prev) => ({ ...prev, availableQuantity: e.target.value }))}
+                    className="!bg-white !border-[#2a4644] focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]"
                     required
                   />
                 </div>
@@ -606,7 +599,7 @@ export function ProveedorInventario() {
                   value={formData.statusId}
                   onValueChange={(value) => setFormData((prev) => ({ ...prev, statusId: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]" style={{ backgroundColor: "white", borderColor: "#2a4644" }}>
                     <SelectValue placeholder="Selecciona un estado" />
                   </SelectTrigger>
                   <SelectContent>
@@ -625,6 +618,7 @@ export function ProveedorInventario() {
               <Input
                 value={formData.imageUrl}
                 onChange={(e) => setFormData((prev) => ({ ...prev, imageUrl: e.target.value }))}
+                className="!bg-white !border-[#2a4644] focus-visible:!ring-[#2a4644] focus-visible:!border-[#2a4644]"
               />
             </div>
 
@@ -642,3 +636,9 @@ export function ProveedorInventario() {
     </div>
   );
 }
+
+
+
+
+
+

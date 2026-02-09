@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Package, Calendar, DollarSign, AlertTriangle } from 'lucide-react';
+import { ReturnStatusBadge, ToolStatusBadge } from '@/app/components/StatusBadges';
 import { listTools } from '../../../services/toolService';
 import { listToolStatuses } from '../../../services/toolStatusService';
 import { listPaymentsBySupplier } from '../../../services/paymentService';
@@ -78,7 +79,9 @@ export function ProveedorDashboard() {
   const pendingReturns = returns.filter((ret) =>
     ['SENT', 'CL_DAMAGED', 'CL_INCOMPLETE'].includes(normalizeReturnStatus(ret.returnStatusName))
   );
-  const ingresosEsteMes = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const ingresosEsteMes = payments
+    .filter((payment) => (payment.status || '').toUpperCase() === 'PAID')
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -176,9 +179,11 @@ export function ProveedorDashboard() {
                     <p className="text-sm text-gray-500">ID #{tool.id}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800">
-                      {statusNameById[tool.statusId] || 'Estado'}
-                    </span>
+                    <ToolStatusBadge
+                      status={
+                        (statusNameById[tool.statusId] || 'UNAVAILABLE').toUpperCase() as any
+                      }
+                    />
                   </div>
                 </div>
               ))}
@@ -203,9 +208,7 @@ export function ProveedorDashboard() {
                     <p className="text-sm text-gray-500">Reserva #{ret.reservationId}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800">
-                      {ret.returnStatusName}
-                    </span>
+                    <ReturnStatusBadge status={normalizeReturnStatus(ret.returnStatusName)} />
                   </div>
                 </div>
               ))}
@@ -219,3 +222,4 @@ export function ProveedorDashboard() {
     </div>
   );
 }
+
