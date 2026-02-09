@@ -66,11 +66,18 @@ export function CartSidebar({ isFloating = false }: CartSidebarProps) {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const startDate = new Date(reservationDates.start);
+      const endDate = new Date(reservationDates.end);
+      const startValid = !Number.isNaN(startDate.getTime());
+      const endValid = !Number.isNaN(endDate.getTime());
+      if (!startValid || !endValid) {
+        toast.error("Fechas inválidas. Revisa inicio y fin");
+        setIsSubmitting(false);
+        return;
+      }
       const totalDays =
         Math.ceil(
-          (new Date(reservationDates.end).getTime() -
-            new Date(reservationDates.start).getTime()) /
-            (1000 * 3600 * 24),
+          (endDate.getTime() - startDate.getTime()) / (1000 * 3600 * 24),
         ) + 1;
 
       const total = items.reduce(
@@ -121,6 +128,7 @@ export function CartSidebar({ isFloating = false }: CartSidebarProps) {
   };
 
   const totalPrice = getTotalPrice();
+  const safeTotalPrice = Number.isFinite(totalPrice) ? totalPrice : 0;
   const totalItems = getTotalItems();
 
   const triggerButton = (
@@ -184,12 +192,20 @@ export function CartSidebar({ isFloating = false }: CartSidebarProps) {
               {items.map((item) => {
                 const inicio = new Date(item.fechaInicio);
                 const fin = new Date(item.fechaFin);
+                const inicioValid = !Number.isNaN(inicio.getTime());
+                const finValid = !Number.isNaN(fin.getTime());
+                const diasRaw =
+                  inicioValid && finValid
+                    ? Math.ceil(
+                        (fin.getTime() - inicio.getTime()) / (1000 * 3600 * 24),
+                      ) + 1
+                    : 0;
                 const dias =
-                  Math.ceil(
-                    (fin.getTime() - inicio.getTime()) / (1000 * 3600 * 24),
-                  ) + 1;
-                const subtotal =
-                  dias * item.herramienta.precioDia * item.quantity;
+                  Number.isFinite(diasRaw) && diasRaw > 0 ? diasRaw : 0;
+                const precioDia = Number(item.herramienta.precioDia ?? 0);
+                const cantidad = Number(item.quantity ?? 0);
+                const subtotalRaw = dias * precioDia * cantidad;
+                const subtotal = Number.isFinite(subtotalRaw) ? subtotalRaw : 0;
 
                 return (
                   <Card key={item.herramienta.id} className="overflow-hidden">
@@ -215,8 +231,13 @@ export function CartSidebar({ isFloating = false }: CartSidebarProps) {
                       {/* Fechas */}
                       <div className="bg-gray-50 p-2 rounded text-xs">
                         <p className="text-gray-600">
-                          {inicio.toLocaleDateString()} →{" "}
-                          {fin.toLocaleDateString()}
+                          {inicioValid
+                            ? inicio.toLocaleDateString()
+                            : "Selecciona fecha"}{" "}
+                          →{" "}
+                          {finValid
+                            ? fin.toLocaleDateString()
+                            : "Selecciona fecha"}
                         </p>
                         <p className="text-gray-500 mt-1">{dias} día(s)</p>
                       </div>
@@ -303,7 +324,7 @@ export function CartSidebar({ isFloating = false }: CartSidebarProps) {
                 <div className="flex justify-between items-center mb-3">
                   <span className="text-gray-700 font-medium">Total:</span>
                   <span className="text-2xl font-bold text-blue-600">
-                    ${totalPrice}
+                    ${safeTotalPrice}
                   </span>
                 </div>
                 <p className="text-xs text-gray-600">
@@ -394,18 +415,31 @@ export function CartSidebar({ isFloating = false }: CartSidebarProps) {
                     {reservationDates.start && reservationDates.end && (
                       <div className="bg-blue-50 p-3 rounded">
                         {(() => {
+                          const startDate = new Date(reservationDates.start);
+                          const endDate = new Date(reservationDates.end);
+                          const startValid = !Number.isNaN(startDate.getTime());
+                          const endValid = !Number.isNaN(endDate.getTime());
+                          const diasRaw =
+                            startValid && endValid
+                              ? Math.ceil(
+                                  (endDate.getTime() - startDate.getTime()) /
+                                    (1000 * 3600 * 24),
+                                ) + 1
+                              : 0;
                           const dias =
-                            Math.ceil(
-                              (new Date(reservationDates.end).getTime() -
-                                new Date(reservationDates.start).getTime()) /
-                                (1000 * 3600 * 24),
-                            ) + 1;
-                          const total = items.reduce((sum, item) => {
-                            return (
-                              sum +
-                              dias * item.herramienta.precioDia * item.quantity
+                            Number.isFinite(diasRaw) && diasRaw > 0
+                              ? diasRaw
+                              : 0;
+                          const totalRaw = items.reduce((sum, item) => {
+                            const precioDia = Number(
+                              item.herramienta.precioDia ?? 0,
                             );
+                            const cantidad = Number(item.quantity ?? 0);
+                            return sum + dias * precioDia * cantidad;
                           }, 0);
+                          const total = Number.isFinite(totalRaw)
+                            ? totalRaw
+                            : 0;
                           return (
                             <div className="space-y-1 text-sm">
                               <p className="text-gray-600">

@@ -59,6 +59,7 @@ export function ClienteExplorar() {
   type HerramientaConImagenes = Herramienta & {
     imagenes: string[];
     imagen?: string;
+    categoryId?: string;
   };
 
   const [herramientas, setHerramientas] = useState<HerramientaConImagenes[]>(
@@ -127,29 +128,44 @@ export function ClienteExplorar() {
   };
 
   useEffect(() => {
-    setLoadingHerramientas(true);
-    apiClient
-      .get("/tools?availableOnly=true")
-      .then(async (res) => {
-        const baseHerramientas: HerramientaConImagenes[] = Array.isArray(
-          res.data,
-        )
-          ? res.data.map((h: any) => ({
-              id: h.id,
-              nombre: h.name,
-              descripcion: h.description,
-              precioDia: h.dailyPrice,
-              totalQuantity: h.totalQuantity,
-              availableQuantity: h.availableQuantity,
-              categoria:
-                h.categoryName || h.category?.name || h.categoryId || "",
-              status: h.statusName || h.status || "AVAILABLE",
-              proveedorId: String(h.supplierId || h.proveedorId || ""),
-              proveedorNombre: h.supplierName || h.proveedorNombre || "",
-              imagenes: [],
-              imagen: "",
-            }))
-          : [];
+    const fetchTools = async () => {
+      setLoadingHerramientas(true);
+      const params = new URLSearchParams();
+      const isDisponiblesCategoria = filtroCategoria === "disponibles";
+
+      if (soloDisponibles || isDisponiblesCategoria) {
+        params.append("availableOnly", "true");
+      }
+      if (filtroCategoria !== "todas" && !isDisponiblesCategoria) {
+        params.append("categoryId", filtroCategoria);
+      }
+
+      try {
+        const res = await apiClient.get(
+          params.toString() ? `/tools?${params.toString()}` : "/tools",
+        );
+        const rawTools = Array.isArray(res.data)
+          ? res.data
+          : Array.isArray(res.data?.content)
+            ? res.data.content
+            : [];
+        const baseHerramientas: HerramientaConImagenes[] = rawTools.map(
+          (h: any) => ({
+            id: h.id,
+            nombre: h.name,
+            descripcion: h.description,
+            precioDia: h.dailyPrice,
+            totalQuantity: h.totalQuantity,
+            availableQuantity: h.availableQuantity,
+            categoryId: String(h.categoryId || h.category?.id || ""),
+            categoria: h.categoryName || h.category?.name || "",
+            status: h.statusName || h.status || "AVAILABLE",
+            proveedorId: String(h.supplierId || h.proveedorId || ""),
+            proveedorNombre: h.supplierName || h.proveedorNombre || "",
+            imagenes: [],
+            imagen: "",
+          }),
+        );
 
         // Para cada herramienta, buscar todas sus imágenes
         const herramientasConImagenes = await Promise.all(
@@ -201,59 +217,81 @@ export function ClienteExplorar() {
         setHerramientas(herramientasConImagenes);
         console.log("Herramientas con imágenes:", herramientasConImagenes);
         setErrorHerramientas(null);
-      })
-      .catch(() =>
-        setErrorHerramientas("No se pudieron cargar las herramientas"),
-      )
-      .finally(() => setLoadingHerramientas(false));
-  }, []);
+      } catch (error) {
+        setErrorHerramientas("No se pudieron cargar las herramientas");
+      } finally {
+        setLoadingHerramientas(false);
+      }
+    };
+
+    fetchTools();
+  }, [filtroCategoria, soloDisponibles]);
 
   // Contar herramientas por categoría (mock)
   const categoriaCounts = categorias.reduce(
     (acc, cat) => {
-      acc[cat.name] = herramientas.filter(
-        (h) => h.categoria === cat.name,
-      ).length;
+      const catId = String(cat.id);
+      acc[catId] = herramientas.filter((h) => h.categoryId === catId).length;
       return acc;
     },
     {} as Record<string, number>,
   );
 
+  const getCategoriaNombre = (herramienta: HerramientaConImagenes) => {
+    if (herramienta.categoria) return herramienta.categoria;
+    if (!herramienta.categoryId) return "";
+    return (
+      categorias.find((cat) => String(cat.id) === herramienta.categoryId)
+        ?.name || ""
+    );
+  };
+
   const filteredHerramientas = herramientas.filter((h) => {
     const matchSearch =
       h.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       h.descripcion?.toLowerCase().includes(searchTerm.toLowerCase());
+    const isDisponiblesCategoria = filtroCategoria === "disponibles";
     const matchCategoria =
-      filtroCategoria === "todas" || h.categoria === filtroCategoria;
-    const matchDisponible = !soloDisponibles || h.availableQuantity > 0;
+      filtroCategoria === "todas" ||
+      isDisponiblesCategoria ||
+      h.categoryId === filtroCategoria ||
+      getCategoriaNombre(h) ===
+        categorias.find((cat) => String(cat.id) === filtroCategoria)?.name;
+    const matchDisponible =
+      !(soloDisponibles || isDisponiblesCategoria) || h.availableQuantity > 0;
     return matchSearch && matchCategoria && matchDisponible;
   });
 
   // Componente de filtros reutilizable
   const FilterContent = () => (
     <div className="space-y-6">
-      {/* Disponibilidad */}
       <div>
-        <h3 className="font-semibold text-sm mb-3">Disponibilidad</h3>
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="disponibles"
-            checked={soloDisponibles}
-            onCheckedChange={(checked) =>
-              setSoloDisponibles(checked as boolean)
-            }
-          />
-        </div>
-        <Button
-          variant="outline"
-          className="lg:hidden"
-          onClick={() => setIsFilterOpen(true)}
+        <Label htmlFor="categoria">Categoría</Label>
+        <select
+          id="categoria"
+          value={filtroCategoria}
+          onChange={(e) => {
+            setFiltroCategoria(e.target.value);
+            setSoloDisponibles(false);
+          }}
+          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+          disabled={loadingCategorias || !!errorCategorias}
         >
-          <SlidersHorizontal className="w-5 h-5 mr-2" />
-          Filtros
-        </Button>
+          <option value="todas">Todas</option>
+          <option value="disponibles">Disponibles</option>
+          {categorias.map((cat) => (
+            <option key={cat.id} value={String(cat.id)}>
+              {cat.name}
+              {categoriaCounts[String(cat.id)] !== undefined
+                ? ` (${categoriaCounts[String(cat.id)]})`
+                : ""}
+            </option>
+          ))}
+        </select>
+        {errorCategorias && (
+          <p className="mt-2 text-xs text-red-600">{errorCategorias}</p>
+        )}
       </div>
-      {/* Aquí continúa el resto del componente FilterContent y el render principal... */}
     </div>
   );
 
@@ -390,13 +428,6 @@ export function ClienteExplorar() {
       {/* Solo se deja el botón de carrito de la barra superior, se elimina el botón verde del contenido */}
 
       {/* Sidebar del carrito */}
-      <Button
-        className="fixed bottom-6 right-6 z-50 bg-green-700 hover:bg-green-800 text-white font-bold shadow-lg"
-        onClick={() => setShowConfirmModal(true)}
-        disabled={items.length === 0}
-      >
-        Confirmar Reserva
-      </Button>
       <CartSheet open={isCartOpen} onOpenChange={setIsCartOpen}>
         <CartSheetContent side="right" className="w-[350px] max-w-full">
           <CartSheetHeader>
@@ -540,7 +571,7 @@ export function ClienteExplorar() {
                       variant="outline"
                       className="text-blue-600 border-blue-600 text-xs"
                     >
-                      {herramienta.categoria}
+                      {getCategoriaNombre(herramienta)}
                     </Badge>
                     {herramienta.availableQuantity === 0 ? (
                       <Badge variant="destructive" className="text-xs">
@@ -687,24 +718,34 @@ export function ClienteExplorar() {
                                     const fin = new Date(
                                       addToCartData.fechaFin,
                                     );
-                                    const dias =
+                                    const diasRaw =
                                       Math.ceil(
                                         (fin.getTime() - inicio.getTime()) /
                                           (1000 * 3600 * 24),
                                       ) + 1;
-                                    const subtotal =
-                                      dias *
-                                      herramienta.precioDia *
-                                      addToCartData.quantity;
+                                    const precioDia = Number(
+                                      herramienta.precioDia ?? 0,
+                                    );
+                                    const cantidad = Number(
+                                      addToCartData.quantity ?? 0,
+                                    );
+                                    const dias =
+                                      Number.isFinite(diasRaw) && diasRaw > 0
+                                        ? diasRaw
+                                        : 0;
+                                    const subtotalRaw =
+                                      dias * precioDia * cantidad;
+                                    const subtotal = Number.isFinite(
+                                      subtotalRaw,
+                                    )
+                                      ? subtotalRaw
+                                      : 0;
                                     return (
                                       <div className="space-y-2">
                                         <p className="text-xs md:text-sm text-gray-600">
-                                          {dias} día(s) × $
-                                          {herramienta.precioDia} ×{" "}
-                                          {addToCartData.quantity} unidad
-                                          {addToCartData.quantity > 1
-                                            ? "es"
-                                            : ""}
+                                          {dias} día(s) × ${precioDia} ×{" "}
+                                          {cantidad} unidad
+                                          {cantidad > 1 ? "es" : ""}
                                         </p>
                                         <p className="text-xl md:text-2xl font-bold text-blue-600">
                                           Subtotal: ${subtotal}

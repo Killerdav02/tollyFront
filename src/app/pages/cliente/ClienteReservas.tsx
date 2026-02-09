@@ -7,16 +7,9 @@ import {
   CardTitle,
 } from "@/app/components/ui/card";
 import { Button } from "@/app/components/ui/button";
-import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Textarea } from "@/app/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/app/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/app/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +20,7 @@ import {
   DialogTrigger,
 } from "@/app/components/ui/dialog";
 import { Alert, AlertDescription } from "@/app/components/ui/alert";
-import { returns, Return, ReturnDetail } from "@/app/data/mockData";
+import { Return, ReturnDetail } from "@/app/data/mockData";
 import { useAuth } from "../../../auth/useAuth";
 import apiClient from "@/api/apiClient";
 import {
@@ -79,8 +72,40 @@ export function ClienteReservas() {
     Omit<ReturnDetail, "id" | "returnId">[]
   >([]);
   const [returnNotes, setReturnNotes] = useState("");
+  const [returnStatusName, setReturnStatusName] = useState("SEND");
+  const [returnStatuses, setReturnStatuses] = useState<
+    Array<{ id: number; name: string }>
+  >([]);
+  const [loadingReturn, setLoadingReturn] = useState(false);
+  const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+  const [reservasConDevolucion, setReservasConDevolucion] = useState<string[]>(
+    [],
+  );
+  const [confirmedReturnIds, setConfirmedReturnIds] = useState<string[]>([]);
+  const [misReturnos, setMisReturnos] = useState<Return[]>([]);
 
-  const misReturnos = returns.filter((r) => r.clienteId === user?.id);
+  const normalizeReturnStatus = (status?: string) =>
+    String(status || "").toUpperCase();
+
+  const getReturnStatusValue = (ret: any) =>
+    normalizeReturnStatus(
+      ret.status ?? ret.statusName ?? ret.returnStatusName ?? ret.returnStatus,
+    );
+
+  const isBlockedReturnStatus = (status?: string) => {
+    const normalized = normalizeReturnStatus(status);
+    return ["CL_DAMAGED", "CL_INCOMPLETE", "SEND"].includes(normalized);
+  };
+
+  const hasReturnForReserva = (reservaId: string) =>
+    reservasConDevolucion.includes(reservaId) ||
+    misReturnos.some(
+      (ret: any) =>
+        String(ret.reservationId ?? ret.reservation?.id ?? "") === reservaId &&
+        isBlockedReturnStatus(getReturnStatusValue(ret)),
+    );
+  const isReturnConfirmed = (returnId: string) =>
+    confirmedReturnIds.includes(returnId);
 
   const fetchReservas = useCallback(async () => {
     const clientId = user?.client?.id;
@@ -127,9 +152,97 @@ export function ClienteReservas() {
     fetchReservas();
   }, [fetchReservas]);
 
+  const fetchReturns = useCallback(async () => {
+    if (misReservas.length === 0) {
+      setMisReturnos([]);
+      return;
+    }
+
+    try {
+      const res = await apiClient.get("/returns");
+      const rawReturns = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.content)
+          ? res.data.content
+          : [];
+      const reservaIds = new Set(misReservas.map((reserva) => reserva.id));
+      const filteredReturns = rawReturns.filter((ret: any) =>
+        reservaIds.has(String(ret.reservationId ?? ret.reservation?.id ?? "")),
+      );
+      setMisReturnos(filteredReturns as Return[]);
+    } catch (error) {
+      toast.error("No se pudieron cargar las devoluciones");
+      setMisReturnos([]);
+    }
+  }, [misReservas]);
+
+  useEffect(() => {
+    if (misReservas.length === 0) return;
+    fetchReturns();
+  }, [fetchReturns, misReservas.length]);
+
+  useEffect(() => {
+    if (!showCreateReturn) return;
+    const fetchReturnStatuses = async () => {
+      try {
+        const res = await apiClient.get("/return-statuses");
+        if (Array.isArray(res.data)) {
+          setReturnStatuses(res.data);
+        } else if (Array.isArray(res.data?.content)) {
+          setReturnStatuses(res.data.content);
+        }
+      } catch (error) {
+        toast.error("No se pudieron cargar los estados de devolucion");
+      }
+    };
+    fetchReturnStatuses();
+  }, [showCreateReturn]);
+
+  const normalizeStatusName = (value: string) =>
+    value
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+  const getReturnStatusId = (statusValue: string) => {
+    const candidates = {
+      SEND: ["SEND", "SENT", "ENVIADO"],
+      CL_DAMAGED: ["CL_DAMAGED", "DANADO", "DAMAGED"],
+      CL_INCOMPLETE: ["CL_INCOMPLETE", "INCOMPLETO", "INCOMPLETE"],
+    } as Record<string, string[]>;
+
+    const normalizedCandidates = (candidates[statusValue] || []).map(
+      normalizeStatusName,
+    );
+
+    const match = returnStatuses.find((status) =>
+      normalizedCandidates.includes(
+        normalizeStatusName(
+          String(
+            status.name ??
+              status.code ??
+              status.status ??
+              status.statusName ??
+              "",
+          ),
+        ),
+      ),
+    );
+
+    return match?.id;
+  };
+
+  const returnStatusLabelMap: Record<string, string> = {
+    SEND: "Enviado",
+    CL_DAMAGED: "Danos encontrados",
+    CL_INCOMPLETE: "Faltan piezas",
+  };
+
   const handleCreateReturn = async (reservationId: string) => {
     setSelectedReservation(reservationId);
     setShowCreateReturn(true);
+    setIsSubmittingReturn(false);
     try {
       const detailsRes = await apiClient.get(
         `/api/reservations/details/reservation/${reservationId}`,
@@ -156,8 +269,10 @@ export function ClienteReservas() {
     }
   };
 
-  const handleSubmitReturn = () => {
+  const handleSubmitReturn = async () => {
     if (!selectedReservation) return;
+    if (isSubmittingReturn) return;
+    setIsSubmittingReturn(true);
 
     // Validar que todas las cantidades sean válidas
     const hasInvalidQuantity = returnDetails.some(
@@ -170,18 +285,85 @@ export function ClienteReservas() {
       toast.error(
         "Las cantidades a devolver deben ser válidas (entre 1 y la cantidad reservada)",
       );
+      setIsSubmittingReturn(false);
       return;
     }
 
-    toast.success("Devolución creada exitosamente. Estado: PENDING");
-    setShowCreateReturn(false);
-    setReturnDetails([]);
-    setReturnNotes("");
-    setSelectedReservation(null);
+    setLoadingReturn(true);
+    try {
+      const returnStatusId = getReturnStatusId(returnStatusName);
+      if (!returnStatusId) {
+        toast.error("No se encontro el estado de devolucion por ID");
+      }
+
+      const today = new Date();
+      const returnDate = today.toISOString().slice(0, 10);
+      const payload: {
+        reservationId: number;
+        returnDate: string;
+        returnStatusId?: number;
+        returnStatusName: string;
+        details: Array<{
+          toolId: number;
+          quantity: number;
+          observations: string;
+        }>;
+        observations: string;
+      } = {
+        reservationId: Number(selectedReservation),
+        returnDate,
+        returnStatusName,
+        details: returnDetails.map((detail) => ({
+          toolId: Number(detail.toolId),
+          quantity: 1,
+          observations: detail.notes || "OK",
+        })),
+        observations: returnNotes || "",
+      };
+
+      if (returnStatusId) {
+        payload.returnStatusId = returnStatusId;
+      }
+
+      await apiClient.post("/returns", payload);
+
+      toast.success("Devolucion creada exitosamente");
+      setShowCreateReturn(false);
+      setReturnDetails([]);
+      setReturnNotes("");
+      setReturnStatusName("SEND");
+      setSelectedReservation(null);
+      setIsSubmittingReturn(false);
+      setReservasConDevolucion((prev) =>
+        prev.includes(String(selectedReservation))
+          ? prev
+          : [...prev, String(selectedReservation)],
+      );
+      fetchReservas();
+    } catch (error) {
+      toast.error("No se pudo crear la devolucion");
+      setIsSubmittingReturn(false);
+    } finally {
+      setLoadingReturn(false);
+    }
   };
 
-  const handleConfirmShipment = (returnId: string) => {
-    toast.success("Envío confirmado. Estado actualizado a SENT");
+  const handleConfirmShipment = async (
+    reservationId: string,
+    returnId: string,
+  ) => {
+    setLoadingReturn(true);
+    try {
+      await apiClient.put(`/api/reservations/${reservationId}/incident`);
+      toast.success("Envío confirmado. Estado actualizado a IN_INCIDENT");
+      setConfirmedReturnIds((prev) =>
+        prev.includes(returnId) ? prev : [...prev, returnId],
+      );
+    } catch (error) {
+      toast.error("No se pudo confirmar el envío");
+    } finally {
+      setLoadingReturn(false);
+    }
   };
 
   const canCreateReturn = (reservationStatus: string) => {
@@ -265,8 +447,11 @@ export function ClienteReservas() {
       )}
 
       {/* Devoluciones Pendientes */}
-      {misReturnos.filter((r) => r.status === "PENDING" || r.status === "SENT")
-        .length > 0 && (
+      {misReturnos.filter(
+        (r: any) =>
+          ["PENDING", "SENT", "SEND"].includes(getReturnStatusValue(r)) ||
+          isReturnConfirmed(String(r.id)),
+      ).length > 0 && (
         <Card className="border-orange-200">
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -280,10 +465,19 @@ export function ClienteReservas() {
           <CardContent>
             <div className="space-y-4">
               {misReturnos
-                .filter((r) => r.status === "PENDING" || r.status === "SENT")
-                .map((ret) => {
+                .filter(
+                  (r: any) =>
+                    ["PENDING", "SENT", "SEND"].includes(
+                      getReturnStatusValue(r),
+                    ) || isReturnConfirmed(String(r.id)),
+                )
+                .map((ret: any) => {
+                  const returnStatusValue = getReturnStatusValue(ret);
+                  const reservationIdValue = String(
+                    ret.reservationId ?? ret.reservation?.id ?? "",
+                  );
                   const reservation = misReservas.find(
-                    (r) => r.id === ret.reservationId,
+                    (r) => r.id === reservationIdValue,
                   );
                   return (
                     <div
@@ -296,17 +490,17 @@ export function ClienteReservas() {
                             <h3 className="font-semibold text-gray-900">
                               Devolución #{ret.id.slice(0, 8)}
                             </h3>
-                            <ReturnStatusBadge status={ret.status} />
+                            <ReturnStatusBadge status={returnStatusValue} />
                           </div>
                           <p className="text-sm text-gray-600 mb-1">
-                            Reserva: #{ret.reservationId}
+                            Reserva: #{reservationIdValue}
                           </p>
                           <p className="text-sm text-gray-600 mb-2">
                             Herramientas:{" "}
                             {ret.details.map((d) => d.toolName).join(", ")}
                           </p>
                           <p className="text-sm text-gray-500">
-                            {getReturnStatusMessage(ret.status)}
+                            {getReturnStatusMessage(returnStatusValue)}
                           </p>
                         </div>
                         <div className="flex gap-2">
@@ -327,12 +521,12 @@ export function ClienteReservas() {
                                   Detalles de Devolución #{ret.id.slice(0, 8)}
                                 </DialogTitle>
                                 <DialogDescription>
-                                  Estado actual: {ret.status}
+                                  Estado actual: {returnStatusValue}
                                 </DialogDescription>
                               </DialogHeader>
                               <div className="space-y-6">
                                 <ReturnTimeline
-                                  status={ret.status}
+                                  status={returnStatusValue}
                                   createdAt={ret.createdAt}
                                   sentAt={ret.sentAt}
                                   receivedAt={ret.receivedAt}
@@ -368,14 +562,23 @@ export function ClienteReservas() {
                               </div>
                             </DialogContent>
                           </Dialog>
-                          {ret.status === "PENDING" && (
+                          {(returnStatusValue === "PENDING" ||
+                            isReturnConfirmed(String(ret.id))) && (
                             <Button
                               size="sm"
-                              onClick={() => handleConfirmShipment(ret.id)}
+                              onClick={() =>
+                                handleConfirmShipment(
+                                  reservationIdValue,
+                                  String(ret.id),
+                                )
+                              }
                               className="bg-blue-600 hover:bg-blue-700"
+                              disabled={isReturnConfirmed(String(ret.id))}
                             >
                               <Send className="w-4 h-4 mr-1" />
-                              Confirmar Envío
+                              {isReturnConfirmed(String(ret.id))
+                                ? "Confirmado"
+                                : "Confirmar Envío"}
                             </Button>
                           )}
                         </div>
@@ -457,6 +660,7 @@ export function ClienteReservas() {
                           size="sm"
                           onClick={() => handleCreateReturn(reserva.id)}
                           className="bg-orange-600 hover:bg-orange-700"
+                          disabled={hasReturnForReserva(reserva.id)}
                         >
                           <PackageCheck className="w-4 h-4 mr-1" />
                           Crear Devolución
@@ -499,9 +703,6 @@ export function ClienteReservas() {
                     <th className="text-left py-3 px-4 font-medium text-gray-600">
                       Estado
                     </th>
-                    <th className="text-right py-3 px-4 font-medium text-gray-600">
-                      Acciones
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -539,40 +740,6 @@ export function ClienteReservas() {
                       <td className="py-3 px-4">
                         <ReservationStatusBadge status={reserva.estado} />
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        {canCreateReturn(reserva.estado) && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleCreateReturn(reserva.id)}
-                          >
-                            <PackageCheck className="w-4 h-4 mr-1" />
-                            Devolver
-                          </Button>
-                        )}
-                        {!canModifyReservation(reserva.estado) && (
-                          <span className="text-sm text-gray-500">
-                            {reserva.estado === "FINISHED"
-                              ? "Finalizada"
-                              : reserva.estado === "CANCELLED"
-                                ? "Cancelada"
-                                : "En Incidente"}
-                          </span>
-                        )}
-                        {/* Botón de descarga de factura, solo si la reserva está finalizada */}
-                        {reserva.estado === "FINISHED" && (
-                          <Button
-                            size="sm"
-                            className="bg-purple-600 hover:bg-purple-700 ml-2"
-                            onClick={() => {
-                              // Placeholder: futura integración para descargar factura
-                              toast.info("Descarga de factura próximamente");
-                            }}
-                          >
-                            Descargar Factura
-                          </Button>
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -581,7 +748,7 @@ export function ClienteReservas() {
           ) : (
             <div className="text-center py-12">
               <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-500 mb-4">No tienes reservas todavía</p>
+              <p className="text-gray-500 mb-4">No tienes reservas todavia</p>
               <Button>Explorar Herramientas</Button>
             </div>
           )}
@@ -598,82 +765,67 @@ export function ClienteReservas() {
               Cliente actual se toma automáticamente.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 rounded-lg border bg-white p-4">
             <div>
-              <Label>Motivo de la devolución</Label>
+              <Label>Estado de la devolución</Label>
+              <RadioGroup
+                value={returnStatusName}
+                onValueChange={setReturnStatusName}
+                className="space-y-2 rounded-md border bg-gray-50 p-3"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem
+                    value="CL_DAMAGED"
+                    id="return-status-damaged"
+                  />
+                  <Label htmlFor="return-status-damaged">
+                    Danos encontrados
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem
+                    value="CL_INCOMPLETE"
+                    id="return-status-incomplete"
+                  />
+                  <Label htmlFor="return-status-incomplete">
+                    Faltan piezas
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="SEND" id="return-status-sent" />
+                  <Label htmlFor="return-status-sent">Enviado</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div>
+              <Label>Observaciones</Label>
               <Textarea
-                placeholder="Escribe el motivo de la devolución..."
+                placeholder="Escribe las observaciones de la devolución..."
                 value={returnNotes}
                 onChange={(e) => setReturnNotes(e.target.value)}
+                className="min-h-[96px]"
               />
             </div>
           </div>
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              Las cantidades a devolver no pueden exceder las cantidades
-              reservadas. Verifica la condición de cada herramienta.
-            </AlertDescription>
-          </Alert>
-          <div className="space-y-6">
-            {returnDetails.map((detail, index) => (
-              <div key={index} className="p-4 border rounded-lg space-y-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="font-medium">{detail.toolName}</h4>
-                    <p className="text-sm text-gray-500">
-                      Reservado: {detail.quantityReserved} unidades
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Cantidad a Devolver *</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={detail.quantityReserved}
-                      value={detail.quantityToReturn}
-                      onChange={(e) => {
-                        const newDetails = [...returnDetails];
-                        newDetails[index].quantityToReturn = Math.min(
-                          Math.max(1, parseInt(e.target.value) || 1),
-                          detail.quantityReserved,
-                        );
-                        setReturnDetails(newDetails);
-                      }}
-                    />
-                    {detail.quantityToReturn > detail.quantityReserved && (
-                      <p className="text-xs text-red-600 mt-1">
-                        No puedes devolver más de lo reservado
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <Label>Notas</Label>
-                  <Textarea
-                    placeholder="Observaciones sobre esta herramienta..."
-                    value={detail.notes || ""}
-                    onChange={(e) => {
-                      const newDetails = [...returnDetails];
-                      newDetails[index].notes = e.target.value;
-                      setReturnDetails(newDetails);
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p className="text-sm text-gray-700">
+              Se enviara 1 unidad por herramienta en la devolucion.
+            </p>
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setShowCreateReturn(false)}
+              disabled={loadingReturn || isSubmittingReturn}
             >
               Cancelar
             </Button>
-            <Button onClick={handleSubmitReturn}>
-              Crear Devolución (Estado: PENDING)
+            <Button
+              onClick={handleSubmitReturn}
+              disabled={loadingReturn || isSubmittingReturn}
+            >
+              Crear Devolución (Estado:{" "}
+              {returnStatusLabelMap[returnStatusName] || "Normal"})
             </Button>
           </DialogFooter>
         </DialogContent>
