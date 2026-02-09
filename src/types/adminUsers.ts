@@ -38,3 +38,31 @@ export interface UpdateAdminUserResponse {
     user?: AdminUser;
     message?: string;
 }
+
+export interface CreateAdminClientRequest {
+    email: string;
+    password: string;
+    role?: "CLIENT";
+    firstName: string;
+    lastName: string;
+    address: string;
+    document: string;
+    phone: string;
+    company?: null;
+    identification?: null;
+    contactName?: null;
+}
+
+export interface CreateAdminSupplierRequest {
+    email: string;
+    password: string;
+    role?: "SUPPLIER";
+    firstName?: null;
+    lastName?: null;
+    address?: null;
+    document?: null;
+    phone: string;
+    company: string;
+    identification: string;
+    contactName: string;
+}

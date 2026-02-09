@@ -1,7 +1,11 @@
 import { Button } from "@/app/components/ui/button";
 import { UserPlus } from "lucide-react";
 
-export function UsuariosHeader() {
+interface Props {
+    onCreate: () => void;
+}
+
+export function UsuariosHeader({ onCreate }: Props) {
     return (
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <div>
@@ -10,7 +14,7 @@ export function UsuariosHeader() {
                     Administra proveedores y clientes de la plataforma
                 </p>
             </div>
-            <Button className="w-full sm:w-auto">
+            <Button className="w-full sm:w-auto" onClick={onCreate}>
                 <UserPlus className="w-4 h-4 mr-2" />
                 <span className="sm:inline">Nuevo Usuario</span>
             </Button>
