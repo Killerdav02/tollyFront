@@ -1,12 +1,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Users, Wrench, Calendar, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
+import { Users, Wrench, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
 import apiClient from '@/api/apiClient';
+import { fetchIncomeReport } from '@/app/services/incomeReport';
+import { fetchPaymentsWithClients, PaymentWithClient } from '@/app/services/paymentsWithClients';
 
 type User = { id: number; nombre: string; estado: string; };
 type Herramienta = { id: number; nombre: string; categoria: string; status: string; availableQuantity: number; };
-type Reserva = { id: number; clienteNombre: string; precioTotal: number; estado: string; details: { toolName: string }[] };
+// type Reserva = { id: number; clienteNombre: string; precioTotal: number; estado: string; details: { toolName: string }[] };
 type Facturacion = { reservasMes: number; ingresosMes: number; ingresosTotal: number };
 type TopTool = { toolId: number; toolName: string; totalQuantity: number };
 
@@ -32,18 +34,43 @@ const fetchUsuarios = async (): Promise<User[]> => {
 };
 
 const fetchHerramientas = async (): Promise<Herramienta[]> => {
-  // TODO: Conectar a la API real de herramientas
-  throw new Error('Conectar fetchHerramientas a la API real');
+  const res = await apiClient.get('/tools');
+  return res.data;
 };
 
-const fetchReservas = async (): Promise<Reserva[]> => {
-  // TODO: Conectar a la API real de reservas
-  throw new Error('Conectar fetchReservas a la API real');
+// type ReservasPaginadas = {
+//   content: any[];
+//   totalElements: number;
+// };
+
+const fetchReservas = async (): Promise<PaymentWithClient[]> => {
+  // Igual que en panel de pagos: obtiene pagos del mes y de ahí las reservas
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const from = new Date(year, month, 1, 0, 0, 0);
+  const to = new Date(year, month + 1, 0, 23, 59, 59);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const formatDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const fromISO = formatDate(from);
+  const toISO = formatDate(to);
+  return await fetchPaymentsWithClients({ from: fromISO, to: toISO });
 };
 
-const fetchFacturacion = async (): Promise<Facturacion> => {
-  // TODO: Conectar a la API real de facturación
-  throw new Error('Conectar fetchFacturacion a la API real');
+// Usar el endpoint /admin/reports/income?from=YYYY-MM-DDTHH:mm:ss&to=YYYY-MM-DDTHH:mm:ss para ingresos del mes
+const fetchFacturacion = async (): Promise<{ totalIncome?: number; month?: number }> => {
+  // Calcular el rango del mes actual
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0-indexed
+  const from = new Date(year, month, 1, 0, 0, 0);
+  const to = new Date(year, month + 1, 0, 23, 59, 59);
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const formatDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const fromISO = formatDate(from);
+  const toISO = formatDate(to);
+  // Llama al endpoint con los parámetros del mes actual
+  return await fetchIncomeReport(fromISO, toISO);
 };
 
 const fetchTopTools = async (): Promise<TopTool[]> => {
@@ -64,7 +91,7 @@ export function AdminDashboard() {
   const anyError = errorUsuarios || errorHerramientas || errorReservas || errorFacturacion;
 
   // Métricas para alertas
-  const reservasPendientes = reservas?.filter(r => r.estado === 'PENDING').length || 0;
+  const reservasPendientes = reservas?.filter(r => r.reservation && 'status' in r.reservation && (r.reservation as any).status === 'PENDING').length || 0;
   const herramientasEnReparacion = herramientas?.filter(h => h.status === 'UNDER_REPAIR').length || 0;
 
   return (
@@ -122,29 +149,6 @@ export function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Reservas Mes
-            </CardTitle>
-            <Calendar className="w-4 h-4 text-gray-500" />
-          </CardHeader>
-          <CardContent>
-            {loadingFacturacion ? (
-              <div className="h-8 flex items-center">Cargando...</div>
-            ) : errorFacturacion ? (
-              <div className="text-red-600 text-xs">{errorFacturacion}</div>
-            ) : facturacion ? (
-              <>
-                <div className="text-2xl font-bold">{facturacion.reservasMes}</div>
-                <p className="text-xs text-green-600 mt-1 flex items-center">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  +12% vs mes anterior
-                </p>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -160,10 +164,8 @@ export function AdminDashboard() {
               <div className="text-red-600 text-xs">{errorFacturacion}</div>
             ) : facturacion ? (
               <>
-                <div className="text-2xl font-bold">${facturacion.ingresosMes.toLocaleString()}</div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Total: ${facturacion.ingresosTotal.toLocaleString()}
-                </p>
+                <div className="text-2xl font-bold">${(facturacion.totalIncome ?? 0).toLocaleString()}</div>
+                
               </>
             ) : null}
           </CardContent>
@@ -208,36 +210,47 @@ export function AdminDashboard() {
               <div className="text-red-600 text-xs">{errorReservas}</div>
             ) : reservas && reservas.length > 0 ? (
               <div className="space-y-4">
-                {reservas.slice(0, 5).map((reserva) => (
-                  <div key={reserva.id} className="flex items-center justify-between pb-4 border-b last:border-0">
-                    <div>
-                      <p className="font-medium text-gray-900">{reserva.details[0]?.toolName}</p>
-                      <p className="text-sm text-gray-500">{reserva.clienteNombre}</p>
+                {reservas.slice(0, 5).map((item: PaymentWithClient) => {
+                  const reserva = item.reservation;
+                  const estado = (reserva && 'status' in reserva) ? (reserva as any).status as keyof typeof estadoLabels : undefined;
+                  const estadoLabels = {
+                    CONFIRMED: 'confirmada',
+                    PENDING: 'pendiente',
+                    IN_PROGRESS: 'en progreso',
+                    FINISHED: 'finalizada',
+                    CANCELLED: 'cancelada',
+                    IN_INCIDENT: 'incidente'
+                  };
+                  const label = estado && estadoLabels[estado] ? estadoLabels[estado] : (reserva && 'status' in reserva ? (reserva as any).status : '-');
+                  return (
+                    <div key={item.payment.id} className="flex items-center justify-between pb-4 border-b last:border-0">
+                      <div>
+                        <p className="font-medium text-gray-900">Reserva #{reserva?.id ?? '-'}</p>
+                        <p className="text-sm text-gray-500">Cliente ID: {reserva?.clientId ?? '-'}</p>
+                        {/* Si existen fechas, muéstralas, si no, muestra '-' */}
+                        <p className="text-xs text-gray-400">
+                          {('startDate' in (reserva ?? {})) ? (reserva as any).startDate : '-'}
+                          {' - '}
+                          {('endDate' in (reserva ?? {})) ? (reserva as any).endDate : '-'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-gray-900">${('total' in (reserva ?? {})) ? (reserva as any).total : (item.payment.amount ?? '-')}</p>
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          estado === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
+                          estado === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                          estado === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                          estado === 'FINISHED' ? 'bg-gray-200 text-gray-800' :
+                          estado === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                          estado === 'IN_INCIDENT' ? 'bg-orange-100 text-orange-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {label}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium text-gray-900">${reserva.precioTotal}</p>
-                      {(() => {
-                        const estadoLabel = {
-                          CONFIRMED: 'confirmada',
-                          PENDING: 'pendiente',
-                          IN_PROGRESS: 'en progreso',
-                          FINISHED: 'finalizada',
-                          CANCELLED: 'cancelada',
-                          IN_INCIDENT: 'incidente'
-                        }[reserva.estado] ?? reserva.estado;
-                        return (
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            reserva.estado === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
-                            reserva.estado === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
-                            {estadoLabel}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="text-gray-500 text-sm">No hay reservas recientes.</div>
