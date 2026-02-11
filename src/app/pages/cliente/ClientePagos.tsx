@@ -70,7 +70,7 @@ export function ClientePagos() {
     try {
       const [reservasRes, pagosRes] = await Promise.all([
         apiClient.get(`/api/reservations/client/${clientId}`),
-        apiClient.get(`/payments/client/${clientId}`),
+        apiClient.get(`/pagos/cliente/${clientId}`),
       ]);
 
       const reservasData: ReservaUI[] = Array.isArray(reservasRes.data)
